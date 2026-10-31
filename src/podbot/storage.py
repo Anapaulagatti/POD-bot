@@ -44,40 +44,34 @@ def list_designs(root: Path | None = None) -> list[dict]:
 
 
 def update_state(design_id: str, platform: str, state: str, root: Path | None = None) -> dict:
+    """A state transition never bypasses the human approval workflow."""
     if platform not in {"redbubble", "teepublic"}:
         raise ValueError("Unknown platform.")
     if state not in ALLOWED_STATES:
         raise ValueError("Unknown review state.")
     if not __import__("re").fullmatch(r"[0-9a-f]{32}", design_id):
         raise ValueError("Invalid design ID.")
-    root = root or designs_directory()
-    file = root / design_id / "manifest.json"
+    if state == "approved":
+        from podbot.publishing import approve_listing
+
+        return approve_listing(design_id, platform, root=root)
+    if state == "uploaded":
+        raise ValueError("Use mark_uploaded(..., confirmed=True) after manual upload.")
+    file = (root or designs_directory()) / design_id / "manifest.json"
     record = json.loads(file.read_text(encoding="utf-8"))
-    record.setdefault("platform_status", {})[platform] = state
+    if record.get("id") != design_id:
+        raise ValueError("Manifest ID mismatch.")
+    record.setdefault("platform_status", {})[platform] = "draft"
+    record.setdefault("approval_evidence", {}).pop(platform, None)
     save_manifest(file.parent, record)
     return record
 
 
 def export_csv(target: Path, platform: str, root: Path | None = None) -> int:
-    if platform not in {"redbubble", "teepublic"}:
-        raise ValueError("Unknown platform.")
-    records = list_designs(root)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=[
-            "id", "title", "description", "tags", "file", "status", "platform", "prompt"
-        ])
-        writer.writeheader()
-        for entry in records:
-            metadata = entry["seo"]
-            writer.writerow({
-                "id": entry["id"], "title": metadata["title"],
-                "description": metadata["description"],
-                "tags": ", ".join(metadata["tags"]), "file": entry["print_file"],
-                "status": entry.get("platform_status", {}).get(platform, "draft"),
-                "platform": platform, "prompt": entry["prompt"],
-            })
-    return len(records)
+    """Only safely approved designs are exported for manual marketplace upload."""
+    from podbot.publishing import export_approved_csv
+
+    return export_approved_csv(target, platform, root=root)
 
 
 def update_seo(
@@ -98,5 +92,10 @@ def update_seo(
     if record.get("id") != design_id:
         raise ValueError("Manifest ID mismatch.")
     record["seo"] = metadata.to_dict()
+    # Metadata changes invalidate approvals; uploading requires a fresh review.
+    for platform in ("redbubble", "teepublic"):
+        if record.get("platform_status", {}).get(platform) == "approved":
+            record["platform_status"][platform] = "draft"
+        record.get("approval_evidence", {}).pop(platform, None)
     save_manifest(folder, record)
     return record

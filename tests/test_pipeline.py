@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from podbot.pipeline import create_draft, prepare_print_image
 from podbot.seo import local_seo, normalize_metadata
@@ -13,7 +13,9 @@ class StubProvider:
     name = "stub-test"
 
     def generate(self, prompt: str):
-        return Image.new("RGBA", (180, 180), (255, 70, 10, 180))
+        image = Image.new("RGBA", (180, 180), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((30, 15, 150, 164), fill=(255, 70, 10, 255))
+        return image
 
 
 def test_seo_normalizes_and_deduplicates():
@@ -44,6 +46,9 @@ def test_pipeline_local_queue_and_export(tmp_path):
     manifest = json.loads((tmp_path / record["id"] / "manifest.json").read_text())
     assert manifest["seo"]["title"]
     assert len(list_designs(tmp_path)) == 1
+    from podbot.publishing import confirm_rights
+
+    confirm_rights(record["id"], root=tmp_path)
     update_state(record["id"], "redbubble", "approved", root=tmp_path)
     assert list_designs(tmp_path)[0]["platform_status"]["redbubble"] == "approved"
     csv_path = tmp_path / "export.csv"

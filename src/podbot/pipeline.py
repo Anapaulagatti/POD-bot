@@ -87,6 +87,9 @@ def create_draft(
                 if not has_alpha else "Inspect edges and resolution before listing."
             ),
             "platform_status": {"redbubble": "draft", "teepublic": "draft"},
+            "rights_confirmed_at": None,
+            "ai_generated": True,
+            "processing": {"steps": ["resize-lanczos"], "native_source": list(image.size)},
         }
         record['preflight'] = {p: assess_design(record, p).to_dict() for p in ('redbubble', 'teepublic')}
         save_manifest(folder, record)
