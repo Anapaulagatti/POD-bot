@@ -44,9 +44,14 @@ def remove_flat_background(
     r, g, b = difference.split()
     maximum = ImageChops.lighter(ImageChops.lighter(r, g), b)
     candidates = maximum.point(lambda value: 255 if value <= tolerance else 0)
-    # 255 = candidate background; 128 = connected flood-filled region.
-    for point in corners:
+    # Flood all four borders, including multiple edge-connected components.
+    # Bound component count to prevent pathological patterns from taking too long.
+    regions = 0
+    for point in edge_points:
         if candidates.getpixel(point) == 255:
+            regions += 1
+            if regions > 32:
+                raise ValueError("Too many separate edge areas for safe flat cutout.")
             ImageDraw.floodfill(candidates, point, 128, thresh=0)
     matte = candidates.point(lambda value: 255 if value == 128 else 0)
     removed_fraction = matte.histogram()[255] / (w * h)
