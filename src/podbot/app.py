@@ -21,6 +21,7 @@ from podbot.audit import (
 )
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
+from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
 from podbot.processing import ProcessOptions, process_stored_design
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
@@ -37,12 +38,13 @@ UPLOAD_PAGES = {
 class PODBotApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("PODBot Studio v0.3 | Local-first")
+        self.title("PODBot Studio v4.0 | Model Marketplace")
         self.geometry("980x720")
         self.minsize(780, 600)
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.records: dict[str, dict] = {}
-        self.provider_choice = tk.StringVar(value="Cloudflare FLUX")
+        self.provider_choice = tk.StringVar(value=CATALOG[0].label)
+        self.gemini_size = tk.StringVar(value="2K")
         self.seo_choice = tk.StringVar(value="Offline SEO")
         self.niche = tk.StringVar(value="minimalist nature")
         self.keywords = tk.StringVar(value="mountain silhouette, hiking, adventure")
@@ -50,6 +52,11 @@ class PODBotApp(tk.Tk):
         self.cloudflare_token = tk.StringVar(value=os.getenv("CLOUDFLARE_API_TOKEN", ""))
         self.hf_token = tk.StringVar(value=os.getenv("HF_TOKEN", ""))
         self.gemini_key = tk.StringVar(value=os.getenv("GEMINI_API_KEY", ""))
+        self.openai_key = tk.StringVar(value=os.getenv("OPENAI_API_KEY", ""))
+        self.replicate_key = tk.StringVar(value=os.getenv("REPLICATE_API_TOKEN", ""))
+        self.fal_key = tk.StringVar(value=os.getenv("FAL_KEY", ""))
+        self.stability_key = tk.StringVar(value=os.getenv("STABILITY_API_KEY", ""))
+        self.model_note = tk.StringVar(value=CATALOG[0].hint)
         self.status = tk.StringVar(value="Ready. Review every design before publishing.")
 
         style = ttk.Style()
@@ -90,14 +97,28 @@ class PODBotApp(tk.Tk):
         row.pack(fill="x", pady=8)
         ttk.Label(row, text="Image provider:").pack(side="left", padx=(0, 5))
         ttk.Combobox(
-            row, textvariable=self.provider_choice, state="readonly", width=22,
-            values=["Cloudflare FLUX", "Hugging Face"],
-        ).pack(side="left", padx=(0, 20))
+            row, textvariable=self.provider_choice, state="readonly", width=40,
+            values=[entry.label for entry in CATALOG],
+        ).pack(side="left", padx=(0, 10))
+        self.provider_choice.trace_add("write", self.update_model_note)
+        ttk.Label(row, text="Gemini resolution:").pack(side="left", padx=(0, 5))
+        ttk.Combobox(
+            row, textvariable=self.gemini_size, state="readonly", width=5,
+            values=["1K", "2K", "4K"],
+        ).pack(side="left", padx=(0, 10))
         ttk.Label(row, text="SEO:").pack(side="left", padx=(0, 5))
         ttk.Combobox(
             row, textvariable=self.seo_choice, state="readonly", width=18,
             values=["Offline SEO", "Gemini AI SEO"],
         ).pack(side="left")
+        ttk.Label(tab, textvariable=self.model_note, wraplength=820).pack(
+            anchor="w", pady=(8, 0)
+        )
+        ttk.Label(
+            tab, text="Paid image generation charges your provider account. "
+            "PODBot never silently switches providers. Confirm cost before each call.",
+            wraplength=820,
+        ).pack(anchor="w")
         self.generate_button = ttk.Button(tab, text="Generate design + draft SEO", command=self.generate)
         self.generate_button.pack(anchor="w", pady=(15, 10))
         ttk.Label(
@@ -210,6 +231,12 @@ class PODBotApp(tk.Tk):
         self.clipboard_append(title)
         self.status.set("Copied a research topic. Review IP before designing.")
 
+    def update_model_note(self, *_args) -> None:
+        selected = LABELS.get(self.provider_choice.get())
+        if selected:
+            spec = get_spec(selected)
+            self.model_note.set(spec.hint + " | Key: " + spec.env_key)
+
     def make_settings_tab(self, tabs: ttk.Notebook) -> None:
         tab = ttk.Frame(tabs, padding=20)
         tabs.add(tab, text="API Settings")
@@ -217,15 +244,19 @@ class PODBotApp(tk.Tk):
             ("Cloudflare Account ID", self.account_id, False),
             ("Cloudflare API token", self.cloudflare_token, True),
             ("Hugging Face token", self.hf_token, True),
-            ("Gemini API key (optional SEO)", self.gemini_key, True),
+            ("Gemini API key (image + SEO)", self.gemini_key, True),
+            ("OpenAI API key (image generation)", self.openai_key, True),
+            ("Replicate API token", self.replicate_key, True),
+            ("fal.ai API key", self.fal_key, True),
+            ("Stability API key", self.stability_key, True),
         ]:
             ttk.Label(tab, text=label).pack(anchor="w", pady=(10, 2))
             ttk.Entry(tab, textvariable=variable, show="*" if secret else "").pack(fill="x")
         ttk.Label(
             tab,
-            text=("Keys stay in process memory and are NEVER written to project files "
-                  "or saved settings. You may set environment variables instead. "
-                  "API providers have rate limits and may require billing configuration."),
+            text=("Keys stay in process memory and are NEVER written to settings or project files. "
+                  "Use environment variables as an alternative. Each billed model requires "
+                  "a separate confirmation. Free-tier credits can be exhausted."),
             wraplength=700,
         ).pack(anchor="w", pady=22)
         ttk.Button(
@@ -246,12 +277,40 @@ class PODBotApp(tk.Tk):
             "trademarks, copyrighted characters and sensitive claims?",
         ):
             return
-        provider_name = self.provider_choice.get()
-        provider = (
-            CloudflareFluxProvider(self.account_id.get().strip(), self.cloudflare_token.get())
-            if provider_name == "Cloudflare FLUX" else HuggingFaceProvider(self.hf_token.get())
-        )
+        model_id = LABELS.get(self.provider_choice.get())
+        if not model_id:
+            messagebox.showerror("Image model", "Choose a supported image model.")
+            return
+        spec = get_spec(model_id)
         mode = "gemini" if self.seo_choice.get() == "Gemini AI SEO" else "local"
+        if spec.paid or mode == "gemini":
+            if not messagebox.askyesno(
+                "Confirm paid API request",
+                "Selected model: " + spec.label + "\n\n" + spec.hint
+                + "\n\nGemini SEO: " + ("ON" if mode == "gemini" else "OFF")
+                + "\nThis may consume paid credits, potentially twice for image + SEO. "
+                  "Costs depend on provider settings and current pricing.\n"
+                  "Proceed with exactly ONE generation request, no paid fallback?",
+            ):
+                return
+        credentials = {
+            "CLOUDFLARE_ACCOUNT_ID": self.account_id.get(),
+            "CLOUDFLARE_API_TOKEN": self.cloudflare_token.get(),
+            "HF_TOKEN": self.hf_token.get(),
+            "GEMINI_API_KEY": self.gemini_key.get(),
+            "OPENAI_API_KEY": self.openai_key.get(),
+            "REPLICATE_API_TOKEN": self.replicate_key.get(),
+            "FAL_KEY": self.fal_key.get(),
+            "STABILITY_API_KEY": self.stability_key.get(),
+        }
+        try:
+            provider = make_provider(
+                model_id, credentials, allow_paid=spec.paid,
+                gemini_size=self.gemini_size.get(),
+            )
+        except (ValueError, PermissionError) as exc:
+            messagebox.showerror("Image provider", str(exc))
+            return
         niche, keywords, key = self.niche.get(), self.keywords.get(), self.gemini_key.get()
         if matches := find_blocked_terms(f"{prompt} {niche} {keywords}", get_blocklist()):
             messagebox.showerror("Blocklist", "Review these terms: " + ", ".join(matches))
