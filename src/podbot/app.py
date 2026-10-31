@@ -350,12 +350,12 @@ class PODBotApp(tk.Tk):
         except (OSError, ValueError) as exc:
             messagebox.showerror("Preflight error", str(exc))
             return
-        notes = "\\n".join(report.issues) if report.issues else "No automatic warnings detected."
+        notes = "\n".join(report.issues) if report.issues else "No automatic warnings detected."
         messagebox.showinfo(
             f"Print preflight: {platform}",
-            f"Canvas: {report.canvas_size[0]} x {report.canvas_size[1]}\\n"
-            f"Artwork: {report.artwork_size[0]} x {report.artwork_size[1]}\\n\\n"
-            f"{notes}\\n\\nAutomated checks cannot guarantee print quality or IP clearance.",
+            f"Canvas: {report.canvas_size[0]} x {report.canvas_size[1]}\n"
+            f"Artwork: {report.artwork_size[0]} x {report.artwork_size[1]}\n\n"
+            f"{notes}\n\nAutomated checks cannot guarantee print quality or IP clearance.",
         )
 
     def create_mockup(self) -> None:

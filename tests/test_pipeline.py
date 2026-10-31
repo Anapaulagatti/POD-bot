@@ -31,7 +31,7 @@ def test_offline_seo_is_not_fake_trend_data():
 
 def test_print_canvas_preserves_alpha(tmp_path):
     path = tmp_path / "print.png"
-    assert prepare_print_image(Image.new("RGBA", (20, 30), (50, 80, 90, 255)), path, (100, 120))
+    assert prepare_print_image(Image.new("RGBA", (20, 30), (50, 80, 90, 255)), path, (100, 120)) is False
     with Image.open(path) as image:
         assert image.size == (100, 120)
         assert image.getpixel((0, 0))[3] == 0

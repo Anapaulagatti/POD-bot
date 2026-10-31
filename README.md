@@ -10,12 +10,12 @@
 - Cloudflare Workers AI FLUX.1-schnell provider and optional Hugging Face provider.
 - Deterministic offline SEO or optional Gemini REST SEO (depending on availability/quota).
 - Generate one design per click, with a rights-confirmation prompt.
-- Save source PNG and a 4500×5400 px PNG on a transparent canvas; retain metadata in a JSON manifest.
+- Save source PNG and a 5000×5500 px PNG on a transparent canvas; retain metadata in a JSON manifest.
 - Local review queue with platform-specific draft, approved and manually uploaded states.
 - Export editable CSV metadata and open official upload pages in the user's browser.
 - GitHub Actions Windows CI to run tests and build a downloadable single-file `.exe` artifact.
 
-**Limits:** AI image generators often produce opaque backgrounds. Putting an opaque source on a transparent canvas **does not remove the source background**. Scaling does not add real print detail, even if the saved PNG is 4500×5400 px. The operator must inspect/edit the design and comply with marketplace size, transparency, intellectual-property, AI-content and upload policies. Draft tags are NOT backed by live trend data. No scraping, login automation, CAPTCHA bypass or unattended mass publishing is included.
+**Limits:** AI image generators often produce opaque backgrounds. Putting an opaque source on a transparent canvas **does not remove the source background**. Scaling does not add real print detail, even if the saved PNG is 5000×5500 px. The operator must inspect/edit the design and comply with marketplace size, transparency, intellectual-property, AI-content and upload policies. Draft tags are NOT backed by live trend data. No scraping, login automation, CAPTCHA bypass or unattended mass publishing is included.
 
 ## Run from source
 
@@ -51,7 +51,7 @@ Output is `dist/PODBot.exe`. Alternatively, enable GitHub Actions, run **Validat
 
 ## Storage and security
 
-`~/Documents/PODBot/designs/<uuid>/` stores `source.png`, `print_4500x5400.png` and `manifest.json`. API keys remain in memory and are not saved; the original prompt and listing metadata are stored locally. Generated designs are not encrypted. No user password/cookie or social-login tokens are collected.
+`~/Documents/PODBot/designs/<uuid>/` stores `source.png`, `print_5000x5500.png` and `manifest.json`. API keys remain in memory and are not saved; the original prompt and listing metadata are stored locally. Generated designs are not encrypted. No user password/cookie or social-login tokens are collected.
 
 ## Development roadmap
 
@@ -62,3 +62,13 @@ Output is `dist/PODBot.exe`. Alternatively, enable GitHub Actions, run **Validat
 5. **MVP 1.0:** Windows code signing, installer/update strategy, secure encrypted credential store, release QA and backup/restore.
 
 See [Architecture](docs/ARCHITECTURE.md), [Source Review](docs/REFERENCE_REPOS.md), and [Hướng dẫn GitHub / build EXE](docs/GITHUB_SETUP_VI.md).
+
+## New in MVP 0.2 (experimental development branch)
+
+- Project-scoped ECC Python/TDD skills (license and installation caveats in [ECC integration](docs/ECC_INTEGRATION.md)). They enhance the developer workflow, not EXE runtime.
+- Google Trends public RSS research by country, with source and approximate volume (not a product-opportunity guarantee). Brands/celebrities shown in RSS are **not** automatically safe to sell.
+- TeePublic all-products 5000 × 5500 transparent-canvas preset, per-platform image preflight warnings, and illustrative local T-shirt mockup preview.
+- The command line adds `podbot trends --country US`, `podbot preflight --id ID --platform teepublic`, and `podbot mockup --id ID`.
+- Desktop GUI adds a Trend Research tab, Preflight and T-shirt mockup buttons. User approval is still required for marketplace publishing.
+
+See [marketplace design requirements](docs/MARKETPLACE_REQUIREMENTS.md). These checks are advisory; the original AI resolution and actual visible artwork dimensions matter, and no resizing creates genuine high-resolution detail.

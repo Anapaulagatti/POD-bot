@@ -18,10 +18,19 @@ jobs:
         run: python -m pip install -e ".[hf,dev]"
       - name: Run unit tests
         run: python -m pytest -q
+      - name: Compile Python modules
+        run: python -m compileall -q src
       - name: Lint
         run: python -m ruff check src tests
       - name: Build single-file EXE
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name PODBot --paths src --collect-submodules huggingface_hub src/podbot/app.py
+      - name: Smoke-check Windows EXE output
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/PODBot.exe")) { throw "Missing expected EXE" }
+          $file = Get-Item "dist/PODBot.exe"
+          if ($file.Length -lt 1000000) { throw "EXE is unexpectedly small" }
+          Write-Host "Built PODBot.exe bytes: $($file.Length)"
       - uses: actions/upload-artifact@v4
         with:
           name: PODBot-windows-exe
