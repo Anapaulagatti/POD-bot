@@ -14,7 +14,6 @@ from podbot.processing import (
     ProcessOptions,
     _rembg_session,
     process_image,
-    process_stored_design,
 )
 from podbot.prompting import FLAT_BACKGROUND_SUFFIX, prepare_image_prompt
 from podbot.rehash import rehash_designs

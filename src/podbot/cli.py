@@ -15,8 +15,8 @@ from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.processing import ProcessOptions, process_stored_design
 from podbot.provider_catalog import CATALOG, MODELS, get_spec, make_provider
-from podbot.rehash import rehash_designs
 from podbot.publishing import approve_listing, confirm_rights, mark_uploaded
+from podbot.rehash import rehash_designs
 from podbot.quality import assess_design
 from podbot.storage import export_csv, list_designs, update_state
 from podbot.trends import read_trends

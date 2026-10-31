@@ -44,6 +44,11 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
           if (!(Test-Path "dist/PODBot/PODBot.exe")) { throw "onedir EXE missing" }
+      - name: Archive onedir before second PyInstaller build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
+          Compress-Archive -Path "dist/PODBot" -DestinationPath "release-assets/PODBot-$env:GITHUB_REF_NAME-windows-onedir.zip"
       - name: Build Windows onefile legacy artifact
         shell: pwsh
         run: |
@@ -52,8 +57,6 @@ jobs:
       - name: Prepare assets and SHA256SUMS
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
-          Compress-Archive -Path "dist/PODBot" -DestinationPath "release-assets/PODBot-$env:GITHUB_REF_NAME-windows-onedir.zip"
           Copy-Item "dist/PODBot.exe" "release-assets/PODBot-$env:GITHUB_REF_NAME-windows-onefile.exe"
           Copy-Item "requirements-windows-py312.lock.txt" "release-assets/requirements-windows-py312.lock.txt"
           $files = Get-ChildItem release-assets -File
