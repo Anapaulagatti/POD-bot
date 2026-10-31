@@ -172,7 +172,7 @@ class PODBotDesktop(ctk.CTk):
         brand = ctk.CTkFrame(sidebar, fg_color="transparent")
         brand.pack(fill="x", padx=22, pady=(28, 29))
         self._label(brand, "✦  PODBot", 25, bold=True).pack(anchor="w")
-        self._label(brand, "STUDIO  4.1  •  VI", 11, fg=ACCENT, bold=True).pack(
+        self._label(brand, "STUDIO  1.0 PREVIEW  •  VI", 11, fg=ACCENT, bold=True).pack(
             anchor="w", pady=(3, 0),
         )
 
