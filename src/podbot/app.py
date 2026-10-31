@@ -12,7 +12,13 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image
 
-from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
+from podbot.audit import (
+    audit_image,
+    find_blocked_terms,
+    get_blocklist,
+    make_color_preview,
+    near_duplicates,
+)
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.processing import ProcessOptions, process_stored_design
@@ -560,11 +566,21 @@ class PODBotApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def open_upload(self) -> None:
+        item = self.selected()
+        if not item:
+            return
         platform = self.selected_platform.get()
+        if item.get("platform_status", {}).get(platform) != "approved":
+            messagebox.showerror(
+                "Approval required",
+                "Only an approved design may enter the manual upload workflow.",
+            )
+            return
         messagebox.showinfo(
             "Manual publishing only",
-            "This opens the platform in your browser. PODBot does not use unapproved "
-            "automation, submit uploads, handle CAPTCHA, or store login credentials.",
+            "First review the official platform rules. Upload your PNG manually, "
+            "verify product placement, art and SEO, then confirm Uploaded in PODBot. "
+            "No passwords, browser scripts, or CAPTCHA automation are used.",
         )
         webbrowser.open(POLICY_URLS[platform])
         webbrowser.open(UPLOAD_PAGES[platform])

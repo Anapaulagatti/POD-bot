@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from podbot.audit import audit_image, find_blocked_terms, get_blocklist
+from podbot.audit import audit_image, find_blocked_terms, get_blocklist, near_duplicates
 from podbot.settings import designs_directory
 from podbot.storage import list_designs, save_manifest
 
@@ -71,6 +71,13 @@ def approve_listing(design_id: str, platform: str, *, root: Path | None = None,
                     blocklist: list[str] | None = None) -> dict:
     file, entry = _load(design_id, root)
     checks = validate_listing(entry, platform, blocklist=blocklist)
+    duplicates = near_duplicates(entry, list_designs(root))
+    if duplicates:
+        checks.append({
+            "name": "similar_designs", "level": "warn",
+            "value": ", ".join(duplicates[:5]),
+            "message": "Possible near-duplicate detected locally. Review originality.",
+        })
     entry.setdefault("platform_status", {})[platform] = "approved"
     entry.setdefault("approval_evidence", {})[platform] = {
         "timestamp": datetime.now(UTC).isoformat(),

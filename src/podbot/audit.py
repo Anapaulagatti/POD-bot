@@ -146,3 +146,23 @@ def make_color_preview(artwork: Image.Image, target: Path,
     target.parent.mkdir(parents=True, exist_ok=True)
     preview.save(target, "PNG")
     return target
+
+
+
+def near_duplicates(
+    entry: dict, other_entries: list[dict], max_distance: int = 8
+) -> list[str]:
+    """Advisory local dHash overlap; no external similarity server."""
+    current = entry.get("fingerprint")
+    if not isinstance(current, str) or not re.fullmatch(r"[0-9a-f]{16}", current):
+        return []
+    matches = []
+    for other in other_entries:
+        candidate = other.get("fingerprint")
+        if other.get("id") != entry.get("id") and isinstance(candidate, str):
+            try:
+                if hash_distance(current, candidate) < max_distance:
+                    matches.append(str(other.get("id")))
+            except ValueError:
+                continue
+    return matches
