@@ -1,4 +1,8 @@
-# PODBot Studio 4.0.0 (developer preview)
+# PODBot Studio 4.1.0 · Giao diện tiếng Việt
+
+**Hướng dẫn sử dụng bằng tiếng Việt:** [Bắt đầu tại đây](docs/HUONG_DAN_GIAO_DIEN_VI.md) · [Nghiên cứu repository giao diện](docs/UI_REDESIGN_VI.md)
+
+Phiên bản 4.1 thay giao diện Tkinter cũ bằng desktop UI CustomTkinter thiết kế lại: thanh điều hướng, tổng quan trực quan, tạo ảnh AI, thư viện xem ảnh và phê duyệt, xu hướng, cài đặt API. Mọi thao tác đăng Redbubble/TeePublic vẫn cần xác nhận thủ công.
 
 **Local-first Windows Print-On-Demand studio:** generate original AI design drafts, prepare transparent-canvas PNG files, create SEO metadata, review drafts for Redbubble and TeePublic, then upload manually. Written in Python, designed to become a single `PODBot.exe`.
 
@@ -6,7 +10,7 @@
 
 ## What works
 
-- Native Tkinter desktop GUI with AI Design + SEO, Publishing Queue, Trend Research and API Settings tabs.
+- CustomTkinter desktop GUI mặc định bằng tiếng Việt, có thanh điều hướng, trang tổng quan, Studio tạo ảnh, thư viện và trang xu hướng.
 - 14 user-selectable image models across Cloudflare, Hugging Face, Google Gemini, OpenAI, Replicate, fal.ai and Stability AI; see [Model marketplace](docs/PROVIDER_MARKETPLACE_V4.md).
 - Deterministic offline SEO or optional Gemini REST SEO (depending on availability/quota).
 - Generate one design per click with explicit rights and paid-API confirmation; import your own PNG/JPEG/WebP without AI fees.
