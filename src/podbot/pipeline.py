@@ -11,8 +11,8 @@ from pathlib import Path
 from PIL import Image
 
 from podbot.audit import audit_image, find_blocked_terms, fingerprint, get_blocklist
-from podbot.providers import ImageProvider
 from podbot.processing import compose_print
+from podbot.providers import ImageProvider
 from podbot.seo import SEOMetadata, gemini_seo, local_seo
 from podbot.settings import designs_directory
 from podbot.storage import save_manifest

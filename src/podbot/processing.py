@@ -73,7 +73,7 @@ def _remove_background_python(image: Image.Image, model: str) -> Image.Image:
     session = new_session(model)
     result = remove(image.convert("RGB"), session=session)
     if not isinstance(result, Image.Image):
-        raise RuntimeError("rembg returned unsupported image data.")
+        raise TypeError("rembg returned unsupported image data.")
     output = result.convert("RGBA")
     if output.getchannel("A").getextrema()[0] == 255:
         raise RuntimeError("Background removal produced no transparent region.")
