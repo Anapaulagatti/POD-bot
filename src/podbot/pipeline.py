@@ -11,11 +11,12 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from podbot.providers import ImageProvider
+from podbot.quality import assess_design
 from podbot.seo import SEOMetadata, gemini_seo, local_seo
 from podbot.settings import designs_directory
 from podbot.storage import save_manifest
 
-PRINT_SIZE = (4500, 5400)
+PRINT_SIZE = (5000, 5500)
 
 
 def prepare_print_image(image: Image.Image, target: Path, size: tuple[int, int] = PRINT_SIZE) -> bool:
@@ -25,7 +26,7 @@ def prepare_print_image(image: Image.Image, target: Path, size: tuple[int, int] 
     """
     if image.width < 1 or image.height < 1:
         raise ValueError("Invalid image dimensions.")
-    has_alpha = image.mode in {"RGBA", "LA"} or "transparency" in image.info
+    has_alpha = image.convert("RGBA").getchannel("A").getextrema()[0] < 255
     rgba = image.convert("RGBA")
     fitted = ImageOps.contain(rgba, (int(size[0] * .9), int(size[1] * .9)), Image.Resampling.LANCZOS)
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
@@ -60,7 +61,7 @@ def create_draft(
     folder = (root or designs_directory()) / design_id
     folder.mkdir(parents=True, exist_ok=False)
     source_path = folder / "source.png"
-    print_path = folder / "print_4500x5400.png"
+    print_path = folder / "print_5000x5500.png"
     try:
         image.save(source_path, format="PNG")
         has_alpha = prepare_print_image(image, print_path)
@@ -87,6 +88,7 @@ def create_draft(
             ),
             "platform_status": {"redbubble": "draft", "teepublic": "draft"},
         }
+        record['preflight'] = {p: assess_design(record, p).to_dict() for p in ('redbubble', 'teepublic')}
         save_manifest(folder, record)
         return record
     except Exception:

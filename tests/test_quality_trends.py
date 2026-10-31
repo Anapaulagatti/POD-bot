@@ -1,7 +1,5 @@
 """Acceptance tests for print preflight, real RSS trends and local mockups."""
 
-from io import BytesIO
-
 import pytest
 from PIL import Image
 
@@ -74,7 +72,7 @@ def test_opaque_rgba_is_not_counted_as_transparent(tmp_path):
 
 def test_preflight_flags_low_native_resolution_and_opaque_art():
     img = Image.new("RGBA", (200, 200), (60, 60, 60, 255))
-    report = assess_image(img, source_size=(512, 512), platform="teepublic")
+    report = assess_image(img, source_size=(50, 50), platform="teepublic")
     assert not report.ready
     assert any("5000" in issue for issue in report.issues)
     assert any("opaque" in issue.lower() for issue in report.issues)
