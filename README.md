@@ -1,4 +1,4 @@
-# PODBot Studio (MVP 0.1.0)
+# PODBot Studio (MVP 0.2.0)
 
 **Local-first Windows Print-On-Demand studio:** generate original AI design drafts, prepare transparent-canvas PNG files, create SEO metadata, review drafts for Redbubble and TeePublic, then upload manually. Written in Python, designed to become a single `PODBot.exe`.
 
@@ -63,7 +63,7 @@ Output is `dist/PODBot.exe`. Alternatively, enable GitHub Actions, run **Validat
 
 See [Architecture](docs/ARCHITECTURE.md), [Source Review](docs/REFERENCE_REPOS.md), and [Hướng dẫn GitHub / build EXE](docs/GITHUB_SETUP_VI.md).
 
-## New in MVP 0.2 (experimental development branch)
+## Added in MVP 0.2
 
 - Project-scoped ECC Python/TDD skills (license and installation caveats in [ECC integration](docs/ECC_INTEGRATION.md)). They enhance the developer workflow, not EXE runtime.
 - Google Trends public RSS research by country, with source and approximate volume (not a product-opportunity guarantee). Brands/celebrities shown in RSS are **not** automatically safe to sell.

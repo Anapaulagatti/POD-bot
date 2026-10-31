@@ -29,7 +29,7 @@ UPLOAD_PAGES = {
 class PODBotApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("PODBot Studio v0.1 | Local-first")
+        self.title("PODBot Studio v0.2 | Local-first")
         self.geometry("980x720")
         self.minsize(780, 600)
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
