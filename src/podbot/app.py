@@ -369,16 +369,18 @@ class PODBotApp(tk.Tk):
             return
         platform = self.selected_platform.get()
         try:
-            report = assess_design(item, platform)
+            with Image.open(item["print_file"]) as asset:
+                checks = audit_image(asset, platform)
         except (OSError, ValueError) as exc:
             messagebox.showerror("Preflight error", str(exc))
             return
-        notes = "\n".join(report.issues) if report.issues else "No automatic warnings detected."
+        summary = "\\n".join(
+            f"{check.level.upper()} | {check.name}: {check.value} | {check.message}"
+            for check in checks
+        )
         messagebox.showinfo(
-            f"Print preflight: {platform}",
-            f"Canvas: {report.canvas_size[0]} x {report.canvas_size[1]}\n"
-            f"Artwork: {report.artwork_size[0]} x {report.artwork_size[1]}\n\n"
-            f"{notes}\n\nAutomated checks cannot guarantee print quality or IP clearance.",
+            f"Print / QC: {platform}",
+            summary + "\\n\\nEvery FAIL blocks approval. Warnings require human review.",
         )
 
     def create_mockup(self) -> None:
@@ -437,6 +439,87 @@ class PODBotApp(tk.Tk):
             self.status.set("Saved manually reviewed SEO metadata.")
 
         ttk.Button(frame, text="Save metadata", command=save).pack(anchor="e", pady=12)
+
+    def edit_blocklist(self) -> None:
+        path = data_directory() / "blocklist.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text(
+                "# User-maintained risk terms; one phrase per line. Not a trademark registry.\n",
+                encoding="utf-8",
+            )
+        if os.name == "nt":
+            os.startfile(path)
+        else:
+            webbrowser.open(path.as_uri())
+
+    def preview_colors(self) -> None:
+        item = self.selected()
+        if not item:
+            return
+        target = Path(item["print_file"]).parent / "preview-4-colors.png"
+        try:
+            with Image.open(item["print_file"]) as original:
+                thumbnail = original.copy()
+                thumbnail.thumbnail((1000, 1000))
+                make_color_preview(thumbnail, target)
+            webbrowser.open(target.as_uri())
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Preview", str(exc))
+
+    def process_selected(self) -> None:
+        item = self.selected()
+        if not item:
+            return
+        use_bg = messagebox.askyesno(
+            "Optional background removal",
+            "Use a separately installed rembg executable? It may download its model "
+            "on first run. No models are included in PODBot.exe. Choose No to crop only.",
+        )
+        rembg_binary = None
+        if use_bg:
+            path = filedialog.askopenfilename(
+                title="Select installed rembg.exe",
+                filetypes=[("Executable", "*.exe"), ("All files", "*")],
+            )
+            if not path:
+                return
+            rembg_binary = Path(path)
+        use_sr = messagebox.askyesno(
+            "Optional AI upscale",
+            "Use an external realesrgan-ncnn-vulkan.exe, separately downloaded by you? "
+            "Choose No for ordinary Lanczos scaling.",
+        )
+        sr_binary = None
+        if use_sr:
+            path = filedialog.askopenfilename(
+                title="Select Real-ESRGAN executable",
+                filetypes=[("Executable", "*.exe"), ("All files", "*")],
+            )
+            if not path:
+                return
+            sr_binary = Path(path)
+        if not messagebox.askyesno(
+            "Rebuild print asset",
+            "Rebuild from original source? This creates a new PNG and invalidates "
+            "both platform approvals. Review output and rights before approval.",
+        ):
+            return
+        options = ProcessOptions(
+            remove_background=use_bg, rembg_binary=rembg_binary,
+            upscale=use_sr, esrgan_binary=sr_binary,
+        )
+        design_id = item["id"]
+        self.status.set("Image processor working in background...")
+
+        def worker() -> None:
+            try:
+                saved = process_stored_design(design_id, options)
+                self.events.put(("processed", saved))
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.events.put(("studio_error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def set_state(self, state: str) -> None:
         item = self.selected()
