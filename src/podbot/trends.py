@@ -34,7 +34,7 @@ def parse_trends(xml: str, country: str = "US", limit: int = 10) -> list[Trend]:
         raise ValueError("Trends limit must be between 1 and 50.")
     if len(xml.encode("utf-8")) > MAX_BYTES:
         raise ValueError("RSS response exceeded size limit.")
-    if re.search(r"<!\s*(DOCTYPE|ENTITY)\b", xml, flags=re.I):
+    if re.search(r"<!\s*(DOCTYPE|ENTITY)\b", xml, flags=re.IGNORECASE):
         raise ValueError("DOCTYPE/ENTITY declarations not permitted in RSS.")
     try:
         root = ET.fromstring(xml)

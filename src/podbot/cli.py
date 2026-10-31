@@ -10,10 +10,10 @@ from PIL import Image
 
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
-from podbot.quality import assess_design
-from podbot.trends import read_trends
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
+from podbot.quality import assess_design
 from podbot.storage import export_csv, list_designs, update_state
+from podbot.trends import read_trends
 
 
 def main() -> None:

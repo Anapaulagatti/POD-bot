@@ -8,7 +8,6 @@ from podbot.pipeline import prepare_print_image
 from podbot.quality import assess_image
 from podbot.trends import parse_trends, read_trends
 
-
 RSS = """<?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:ht="https://trends.google.com/trending/rss"><channel>
 <item><title>flower garden</title><pubDate>Sat, 31 Oct 2026 09:00:00 GMT</pubDate>

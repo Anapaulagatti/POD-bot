@@ -14,11 +14,11 @@ from PIL import Image
 
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
-from podbot.quality import assess_design
-from podbot.trends import read_trends
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
+from podbot.quality import assess_design
 from podbot.settings import data_directory
 from podbot.storage import export_csv, list_designs, update_seo, update_state
+from podbot.trends import read_trends
 
 UPLOAD_PAGES = {
     "redbubble": "https://www.redbubble.com/portfolio/images/new",
@@ -247,7 +247,7 @@ class PODBotApp(tk.Tk):
             try:
                 record = create_draft(prompt, niche, keywords, provider, mode, key)
                 self.events.put(("success", record))
-            except Exception as exc:  # noqa: BLE001; show errors in UI worker
+            except Exception as exc:  # noqa: BLE001
                 self.events.put(("error", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
