@@ -51,3 +51,11 @@ Nếu kiểm thử và build thành công, đầu ra sẽ ở `dist/PODBot.exe`.
 - Không có bot tự đăng bài, đăng nhập sàn, lưu mật khẩu, hoặc vượt CAPTCHA.
 
 Không chia sẻ token, cookie, mật khẩu GitHub, Redbubble hay TeePublic trong issue hoặc commit.
+
+## Tính năng bổ sung nhánh phát triển 0.2
+
+- Vào **Trend Research**, chọn quốc gia rồi bấm **Fetch public trends** để xem danh sách truy vấn phổ biến, nguồn Google RSS. Không được tự động dùng nhãn hiệu, người nổi tiếng, tên phim vào thiết kế để bán.
+- Ở **Publishing Queue**, chọn thiết kế và sàn, bấm **Preflight** để kiểm tra kích thước, diện tích hình có alpha và cảnh báo nguồn ảnh bị phóng to; bấm **T-shirt mockup** để xem bố cục mô phỏng trên áo.
+- CLI: `podbot trends --country US --limit 10`, `podbot preflight --id DESIGN_ID --platform teepublic`, `podbot mockup --id DESIGN_ID`.
+- Kiểm tra tài liệu kích thước theo sàn trong [MARKETPLACE_REQUIREMENTS.md](MARKETPLACE_REQUIREMENTS.md).
+- ECC chỉ được thêm như skill phát triển **project-local**. Muốn cài toàn bộ plugin vào Claude Code, đọc [ECC_INTEGRATION.md](ECC_INTEGRATION.md) và tránh cài song song hai phương thức trùng nhau.

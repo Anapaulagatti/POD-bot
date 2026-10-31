@@ -6,9 +6,14 @@ import argparse
 import json
 from pathlib import Path
 
+from PIL import Image
+
+from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
+from podbot.quality import assess_design
 from podbot.storage import export_csv, list_designs, update_state
+from podbot.trends import read_trends
 
 
 def main() -> None:
@@ -28,6 +33,14 @@ def main() -> None:
     review.add_argument("--id", required=True)
     review.add_argument("--platform", choices=["redbubble", "teepublic"], required=True)
     review.add_argument("--state", choices=["draft", "approved", "uploaded"], required=True)
+    trends = commands.add_parser("trends", help="Public, attributed Google Trends RSS")
+    trends.add_argument("--country", default="US")
+    trends.add_argument("--limit", type=int, default=10)
+    preflight = commands.add_parser("preflight", help="Inspect print quality warnings")
+    preflight.add_argument("--id", required=True)
+    preflight.add_argument("--platform", choices=["redbubble", "teepublic"], required=True)
+    mockup = commands.add_parser("mockup", help="Create local T-shirt preview")
+    mockup.add_argument("--id", required=True)
     args = parser.parse_args()
     if args.command == "create":
         provider = (
@@ -43,6 +56,21 @@ def main() -> None:
     elif args.command == "export":
         count = export_csv(args.out, args.platform)
         print(f"Exported {count} records to {args.out}")
+    elif args.command == "trends":
+        for trend in read_trends(args.country, args.limit):
+            print(json.dumps(trend.__dict__, ensure_ascii=False))
+    elif args.command in {"preflight", "mockup"}:
+        item = next((record for record in list_designs() if record["id"] == args.id), None)
+        if not item:
+            parser.error("Design ID not found.")
+        if args.command == "preflight":
+            print(json.dumps(assess_design(item, args.platform).to_dict(), indent=2))
+        else:
+            source = Path(item["print_file"])
+            target = source.parent / "mockup-shirt.png"
+            with Image.open(source) as image:
+                create_shirt_mockup(image, target)
+            print(f"Preview created: {target}")
     elif args.command == "review":
         updated = update_state(args.id, args.platform, args.state)
         print(updated["platform_status"])
