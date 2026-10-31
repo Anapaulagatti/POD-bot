@@ -1,6 +1,5 @@
 """No live calls: atomic API reservations and explicit OS vault operations."""
 
-import json
 import sys
 import types
 

@@ -8,8 +8,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from podbot.audit import audit_image, make_color_preview
 from podbot.api_limits import get_daily_limit, set_daily_limit
+from podbot.audit import audit_image, make_color_preview
 from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft

@@ -660,7 +660,7 @@ class PODBotDesktop(ctk.CTk):
                 {name: variable.get() for name, variable in self.keys.items()},
                 confirmed=True,
             )
-        except Exception as exc:  # noqa: BLE001; show vault errors only in GUI
+        except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Không lưu được API key", str(exc))
             return
         messagebox.showinfo("Kho khóa Windows", f"Đã lưu {count} API key.")
@@ -672,7 +672,7 @@ class PODBotDesktop(ctk.CTk):
             return
         try:
             found = restore_credentials(confirmed=True)
-        except Exception as exc:  # noqa: BLE001; show vault errors only in GUI
+        except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Không đọc được kho khóa", str(exc))
             return
         for name, key in found.items():
@@ -686,7 +686,7 @@ class PODBotDesktop(ctk.CTk):
             return
         try:
             removed = erase_credentials(confirmed=True)
-        except Exception as exc:  # noqa: BLE001; show vault errors only in GUI
+        except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Không xóa được kho khóa", str(exc))
             return
         self.message.set(f"Đã xóa {removed} API key trong kho Windows.")
