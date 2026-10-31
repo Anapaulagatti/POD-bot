@@ -478,14 +478,20 @@ class PODBotDesktop(ctk.CTk):
         )
         edits = ctk.CTkFrame(detail, fg_color="transparent")
         edits.pack(fill="x", padx=20)
-        for title, cmd in (
+        for column in range(3):
+            edits.grid_columnconfigure(column, weight=1)
+        for index, (title, cmd) in enumerate((
             ("Xem PNG", self.open_png),
             ("Chỉnh SEO", self.edit_seo),
             ("Kiểm tra chất lượng", self.preflight),
             ("Xử lý lại ảnh", self.process_image),
             ("Xem màu áo", self.preview_colors),
-        ):
-            self._button(edits, title, cmd, width=131).pack(side="left", padx=(0, 7), pady=(0, 10))
+            ("Mockup áo thun", self.preview_shirt),
+        )):
+            self._button(edits, title, cmd, width=130).grid(
+                row=index // 3, column=index % 3, sticky="ew",
+                padx=4, pady=(0, 8),
+            )
         self._label(detail, "DUYỆT VÀ ĐĂNG SẢN PHẨM", 10, fg=MUTED, bold=True).pack(
             anchor="w", padx=20, pady=(13, 9),
         )
@@ -685,7 +691,7 @@ class PODBotDesktop(ctk.CTk):
             try:
                 result = fn(*args, **kwargs)
                 self.events.put(("ok", result))
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 self.events.put(("error", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -734,15 +740,14 @@ class PODBotDesktop(ctk.CTk):
             return
         spec = get_spec(model_id)
         seo_mode = "gemini" if self.seo.get().startswith("Gemini") else "local"
-        if spec.paid or seo_mode == "gemini":
-            if not messagebox.askyesno(
-                "Xác nhận có thể phát sinh phí",
-                f"Model: {spec.label}\nSEO Gemini: {'Bật' if seo_mode == 'gemini' else 'Tắt'}\n\n"
-                "Lệnh này có thể trừ tiền hoặc tín dụng ở tài khoản API của bạn. "
-                "Không tự chuyển nhà cung cấp và không tự thử lại yêu cầu có tính phí.\n\n"
-                + TEXT["paid"],
-            ):
-                return
+        if (spec.paid or seo_mode == "gemini") and not messagebox.askyesno(
+            "Xác nhận có thể phát sinh phí",
+            f"Model: {spec.label}\nSEO Gemini: {'Bật' if seo_mode == 'gemini' else 'Tắt'}\n\n"
+            "Lệnh này có thể trừ tiền hoặc tín dụng ở tài khoản API của bạn. "
+            "Không tự chuyển nhà cung cấp và không tự thử lại yêu cầu có tính phí.\n\n"
+            + TEXT["paid"],
+        ):
+            return
         try:
             provider = make_provider(
                 model_id, {key: variable.get() for key, variable in self.keys.items()},
@@ -840,6 +845,19 @@ class PODBotDesktop(ctk.CTk):
             return {}
 
         self._run("Đang tạo ảnh xem trước trên 4 màu áo...", work)
+
+    def preview_shirt(self) -> None:
+        if not (entry := self._selected()):
+            return
+        target = Path(entry["print_file"]).parent / "mockup-shirt.png"
+
+        def worker():
+            with Image.open(entry["print_file"]) as original:
+                original.thumbnail((960, 960))
+                create_shirt_mockup(original, target)
+            return {}
+
+        self._run("Đang tạo mô phỏng áo thun...", worker)
 
     def edit_seo(self) -> None:
         if not (entry := self._selected()):

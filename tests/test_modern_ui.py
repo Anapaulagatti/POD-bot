@@ -5,9 +5,9 @@ from pathlib import Path
 from podbot.modern_app import (
     ACCENT,
     MENU,
-    PODBotDesktop,
     STATUSES,
     TEXT,
+    PODBotDesktop,
     model_options,
     status_label,
 )
@@ -43,6 +43,7 @@ def test_design_uses_independent_sidebar_and_pod_workflow():
     assert callable(PODBotDesktop.import_file)
     assert callable(PODBotDesktop.approve)
     assert callable(PODBotDesktop.preflight)
+    assert callable(PODBotDesktop.preview_shirt)
     assert callable(PODBotDesktop.mark_uploaded)
     assert callable(PODBotDesktop.edit_seo)
 
