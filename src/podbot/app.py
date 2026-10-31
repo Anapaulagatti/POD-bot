@@ -10,7 +10,12 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from PIL import Image
+
+from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
+from podbot.quality import assess_design
+from podbot.trends import read_trends
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 from podbot.settings import data_directory
 from podbot.storage import export_csv, list_designs, update_state
@@ -46,6 +51,7 @@ class PODBotApp(tk.Tk):
         tabs.pack(fill="both", expand=True, padx=12, pady=12)
         self.make_create_tab(tabs)
         self.make_queue_tab(tabs)
+        self.make_trends_tab(tabs)
         self.make_settings_tab(tabs)
         ttk.Label(self, textvariable=self.status, anchor="w").pack(
             fill="x", padx=12, pady=(0, 10)
@@ -109,6 +115,10 @@ class PODBotApp(tk.Tk):
         actions.pack(fill="x", pady=10)
         ttk.Button(actions, text="Refresh", command=self.refresh_queue).pack(side="left", padx=3)
         ttk.Button(actions, text="Open PNG", command=self.open_selected).pack(side="left", padx=3)
+        ttk.Button(actions, text="Preflight", command=self.preflight).pack(side="left", padx=3)
+        ttk.Button(actions, text="T-shirt mockup", command=self.create_mockup).pack(
+            side="left", padx=3
+        )
         ttk.Button(actions, text="Open Folder", command=self.open_folder).pack(side="left", padx=3)
         self.selected_platform = tk.StringVar(value="redbubble")
         ttk.Combobox(
@@ -132,6 +142,59 @@ class PODBotApp(tk.Tk):
         self.details = tk.Text(tab, height=9, wrap="word")
         self.details.pack(fill="both", expand=True, pady=(12, 0))
         self.details.configure(state="disabled")
+
+    def make_trends_tab(self, tabs: ttk.Notebook) -> None:
+        tab = ttk.Frame(tabs, padding=16)
+        tabs.add(tab, text="Trend Research")
+        ttk.Label(tab, text="Google Trends RSS - discovery only, not approved product keywords").pack(anchor="w")
+        controls = ttk.Frame(tab)
+        controls.pack(anchor="w", pady=12)
+        self.trend_country = tk.StringVar(value="US")
+        ttk.Combobox(
+            controls, state="readonly", width=8, textvariable=self.trend_country,
+            values=["US", "GB", "CA", "AU", "DE", "FR", "JP", "KR", "BR", "IN"],
+        ).pack(side="left", padx=(0, 12))
+        self.trend_button = ttk.Button(
+            controls, text="Fetch public trends", command=self.fetch_trends,
+        )
+        self.trend_button.pack(side="left")
+        self.trend_list = tk.Listbox(tab, height=17)
+        self.trend_list.pack(fill="both", expand=True)
+        ttk.Button(
+            tab, text="Copy selected trend (review trademarks before use)",
+            command=self.copy_trend,
+        ).pack(anchor="w", pady=12)
+        ttk.Label(
+            tab,
+            text=("Source: trends.google.com/trending/rss. Data is unfiltered popularity, "
+                  "not a POD opportunity score. Brand names, people, shows, and copyrighted "
+                  "terms require separate legal review. No unattended scraping."),
+            wraplength=800,
+        ).pack(anchor="w")
+
+    def fetch_trends(self) -> None:
+        country = self.trend_country.get()
+        self.trend_button.configure(state="disabled")
+        self.status.set("Reading Google Trends RSS on demand...")
+
+        def worker() -> None:
+            try:
+                trends = read_trends(country, limit=15)
+                self.events.put(("trends", trends))
+            except (OSError, RuntimeError, ValueError) as exc:
+                self.events.put(("trends_error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def copy_trend(self) -> None:
+        selected = self.trend_list.curselection()
+        if not selected:
+            messagebox.showinfo("Choose trend", "Select one item from the trend list.")
+            return
+        title = self.trend_list.get(selected[0]).split(" | ", 1)[0]
+        self.clipboard_clear()
+        self.clipboard_append(title)
+        self.status.set("Copied a research topic. Review IP before designing.")
 
     def make_settings_tab(self, tabs: ttk.Notebook) -> None:
         tab = ttk.Frame(tabs, padding=20)
@@ -192,6 +255,22 @@ class PODBotApp(tk.Tk):
         try:
             while True:
                 kind, result = self.events.get_nowait()
+                if kind in {"trends", "trends_error"}:
+                    self.trend_button.configure(state="normal")
+                    if kind == "trends":
+                        self.trend_list.delete(0, "end")
+                        for trend in result:
+                            self.trend_list.insert(
+                                "end",
+                                f"{trend.title} | {trend.approx_traffic} | {trend.published}",
+                            )
+                        self.status.set(
+                            f"Loaded {len(result)} attributed trends. Review each concept."
+                        )
+                    else:
+                        self.status.set("Trend RSS unavailable.")
+                        messagebox.showerror("Trend research error", str(result))
+                    continue
                 self.generate_button.configure(state="normal")
                 if kind == "success":
                     self.refresh_queue()
@@ -260,6 +339,39 @@ class PODBotApp(tk.Tk):
                 os.startfile(folder)  # native Windows file viewer
             else:
                 webbrowser.open(folder.as_uri())
+
+    def preflight(self) -> None:
+        item = self.selected()
+        if not item:
+            return
+        platform = self.selected_platform.get()
+        try:
+            report = assess_design(item, platform)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Preflight error", str(exc))
+            return
+        notes = "\\n".join(report.issues) if report.issues else "No automatic warnings detected."
+        messagebox.showinfo(
+            f"Print preflight: {platform}",
+            f"Canvas: {report.canvas_size[0]} x {report.canvas_size[1]}\\n"
+            f"Artwork: {report.artwork_size[0]} x {report.artwork_size[1]}\\n\\n"
+            f"{notes}\\n\\nAutomated checks cannot guarantee print quality or IP clearance.",
+        )
+
+    def create_mockup(self) -> None:
+        item = self.selected()
+        if not item:
+            return
+        source = Path(item["print_file"])
+        target = source.parent / "mockup-shirt.png"
+        try:
+            with Image.open(source) as image:
+                create_shirt_mockup(image, target)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Mockup error", str(exc))
+            return
+        webbrowser.open(target.as_uri())
+        self.status.set("Illustrative T-shirt mockup created locally.")
 
     def set_state(self, state: str) -> None:
         item = self.selected()
