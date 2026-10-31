@@ -183,7 +183,7 @@ class PODBotApp(tk.Tk):
             try:
                 record = create_draft(prompt, niche, keywords, provider, mode, key)
                 self.events.put(("success", record))
-            except Exception as exc:  # noqa: BLE001; show errors in UI worker
+            except Exception as exc:  # noqa: BLE001
                 self.events.put(("error", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
