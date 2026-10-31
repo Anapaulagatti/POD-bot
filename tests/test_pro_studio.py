@@ -140,9 +140,9 @@ def test_export_only_approved_and_uploaded_requires_prior_approval(tmp_path):
 def test_near_duplicate_check_is_advisory_and_excludes_self():
     from podbot.audit import near_duplicates
 
-    first = {"id": "one", "fingerprint": "0000000000000000"}
-    other = {"id": "two", "fingerprint": "0000000000000001"}
-    distant = {"id": "three", "fingerprint": "ffffffffffffffff"}
+    first = {"id": "one", "fingerprint": "v2:" + "0" * 32}
+    other = {"id": "two", "fingerprint": "v2:" + "0" * 31 + "1"}
+    distant = {"id": "three", "fingerprint": "v2:" + "f" * 32}
     assert near_duplicates(first, [first, other, distant]) == ["two"]
 
 
@@ -166,3 +166,62 @@ def test_editing_approved_seo_invalidates_previous_approval(tmp_path):
     assert changed["platform_status"]["redbubble"] == "draft"
     assert "redbubble" not in changed.get("approval_evidence", {})
     assert export_approved_csv(tmp_path / "approved.csv", "redbubble", root=tmp_path) == 0
+
+
+
+def test_white_transparent_shapes_do_not_collapse_into_one_hash():
+    from podbot.audit import hash_distance, near_duplicates
+
+    a = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+    b = a.copy()
+    ImageDraw.Draw(a).rectangle((10, 10, 28, 105), fill="white")
+    ImageDraw.Draw(b).ellipse((55, 15, 114, 95), fill="white")
+    ha, hb = fingerprint(a), fingerprint(b)
+    assert ha.startswith("v2:") and hb.startswith("v2:")
+    assert ha != hb
+    assert hash_distance(ha, hb) >= 8
+    assert near_duplicates(
+        {"id": "a", "fingerprint": ha},
+        [{"id": "b", "fingerprint": hb}],
+    ) == []
+
+
+def test_legacy_white_fingerprints_are_not_compared_as_valid_v2():
+    from podbot.audit import near_duplicates
+
+    a = {"id": "a", "fingerprint": "0000000000000000"}
+    b = {"id": "b", "fingerprint": "0000000000000000"}
+    assert near_duplicates(a, [b]) == []
+
+
+def test_unified_qc_shared_thresholds():
+    from podbot.audit import MIN_CANVAS
+    from podbot.quality import PROFILE_SIZES, assess_image
+
+    assert PROFILE_SIZES is MIN_CANVAS
+    artwork = sample_logo()
+    legacy = assess_image(artwork, platform="teepublic")
+    authoritative = audit_image(artwork, "teepublic")
+    assert legacy.ready == all(item.level != "fail" for item in authoritative)
+
+
+def test_draft_same_canvas_rules_as_reprocess(tmp_path):
+    from podbot.pipeline import create_draft
+    from podbot.processing import compose_print
+
+    class Provider:
+        name = "fake"
+
+        def generate(self, prompt):
+            image = Image.new("RGBA", (90, 110), (0, 0, 0, 0))
+            ImageDraw.Draw(image).rectangle((35, 40, 56, 80), fill="white")
+            return image
+
+    item = create_draft("original pure white design", "minimal", "white", Provider(), root=tmp_path)
+    with Image.open(item["source_file"]) as source:
+        reference = tmp_path / "reference.png"
+        compose_print(source, reference)
+    with Image.open(reference) as expected, Image.open(item["print_file"]) as actual:
+        assert actual.getchannel("A").getbbox() == expected.getchannel("A").getbbox()
+        assert actual.getpixel((0, 0)) == expected.getpixel((0, 0))
+    assert "quality_checks" in item and "preflight" not in item
