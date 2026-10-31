@@ -134,3 +134,35 @@ def test_export_only_approved_and_uploaded_requires_prior_approval(tmp_path):
     with pytest.raises(ValueError, match="approved"):
         update_state(draft["id"], "redbubble", "uploaded", root=tmp_path)
     assert json.loads((tmp_path / draft["id"] / "manifest.json").read_text())["id"] == draft["id"]
+
+
+
+def test_near_duplicate_check_is_advisory_and_excludes_self():
+    from podbot.audit import near_duplicates
+
+    first = {"id": "one", "fingerprint": "0000000000000000"}
+    other = {"id": "two", "fingerprint": "0000000000000001"}
+    distant = {"id": "three", "fingerprint": "ffffffffffffffff"}
+    assert near_duplicates(first, [first, other, distant]) == ["two"]
+
+
+def test_editing_approved_seo_invalidates_previous_approval(tmp_path):
+    from podbot.pipeline import create_draft
+    from podbot.storage import update_state
+
+    class Fake:
+        name = "test"
+
+        def generate(self, prompt):
+            return sample_logo()
+
+    item = create_draft("original nature print for adults", "nature", "leaf", Fake(), root=tmp_path)
+    confirm_rights(item["id"], root=tmp_path)
+    update_state(item["id"], "redbubble", "approved", root=tmp_path)
+    changed = update_seo(
+        item["id"], "New botanical label", "Original hand-drawn leaves", ["leaf"],
+        root=tmp_path,
+    )
+    assert changed["platform_status"]["redbubble"] == "draft"
+    assert "redbubble" not in changed.get("approval_evidence", {})
+    assert export_approved_csv(tmp_path / "approved.csv", "redbubble", root=tmp_path) == 0
