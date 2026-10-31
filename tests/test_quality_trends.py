@@ -109,3 +109,26 @@ def test_mockup_is_rendered_locally_and_keeps_source_unchanged(tmp_path):
 def test_mockup_rejects_tiny_canvas(tmp_path):
     with pytest.raises(ValueError):
         create_shirt_mockup(Image.new("RGBA", (10, 10)), tmp_path / "t.png", size=(50, 60))
+
+
+def test_seo_changes_are_persisted_and_validate_fields(tmp_path):
+    from podbot.pipeline import create_draft
+    from podbot.storage import list_designs, update_seo
+
+    class Provider:
+        name = "fake"
+
+        def generate(self, prompt):
+            return Image.new("RGBA", (50, 50), (200, 200, 20, 0))
+
+    entry = create_draft("an original botanical illustration", "plants", "garden", Provider(), root=tmp_path)
+    new = update_seo(
+        entry["id"], "Botanical Garden Art", "Original garden illustration", ["botanical", "garden"],
+        root=tmp_path,
+    )
+    assert new["seo"]["title"] == "Botanical Garden Art"
+    assert list_designs(tmp_path)[0]["seo"]["tags"] == ["botanical", "garden"]
+    with pytest.raises(ValueError):
+        update_seo(entry["id"], "", "description", ["tag"], root=tmp_path)
+    with pytest.raises(ValueError):
+        update_seo("../../../etc", "Title", "Desc", ["tag"], root=tmp_path)
