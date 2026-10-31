@@ -12,8 +12,11 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image
 
+from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
+from podbot.processing import ProcessOptions, process_stored_design
+from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 from podbot.quality import assess_design
 from podbot.settings import data_directory
@@ -116,6 +119,8 @@ class PODBotApp(tk.Tk):
         ttk.Button(actions, text="Refresh", command=self.refresh_queue).pack(side="left", padx=3)
         ttk.Button(actions, text="Open PNG", command=self.open_selected).pack(side="left", padx=3)
         ttk.Button(actions, text="Preflight", command=self.preflight).pack(side="left", padx=3)
+        ttk.Button(actions, text="Process PNG", command=self.process_selected).pack(side="left", padx=3)
+        ttk.Button(actions, text="4 colors", command=self.preview_colors).pack(side="left", padx=3)
         ttk.Button(actions, text="Edit SEO", command=self.edit_seo).pack(side="left", padx=3)
         ttk.Button(actions, text="T-shirt mockup", command=self.create_mockup).pack(
             side="left", padx=3
@@ -138,6 +143,9 @@ class PODBotApp(tk.Tk):
             side="left", padx=3
         )
         ttk.Button(second, text="Export queue to CSV", command=self.save_csv).pack(
+            side="left", padx=3
+        )
+        ttk.Button(second, text="Edit Blocklist", command=self.edit_blocklist).pack(
             side="left", padx=3
         )
         self.details = tk.Text(tab, height=9, wrap="word")
@@ -240,6 +248,9 @@ class PODBotApp(tk.Tk):
         )
         mode = "gemini" if self.seo_choice.get() == "Gemini AI SEO" else "local"
         niche, keywords, key = self.niche.get(), self.keywords.get(), self.gemini_key.get()
+        if matches := find_blocked_terms(" ".join((prompt, niche, keywords)), get_blocklist()):
+            messagebox.showerror("Blocklist", "Review these terms: " + ", ".join(matches))
+            return
         self.generate_button.configure(state="disabled")
         self.status.set("Generating... Your desktop remains responsive.")
 
@@ -271,6 +282,17 @@ class PODBotApp(tk.Tk):
                     else:
                         self.status.set("Trend RSS unavailable.")
                         messagebox.showerror("Trend research error", str(result))
+                    continue
+                if kind in {"processed", "approved", "uploaded", "studio_error"}:
+                    if kind == "studio_error":
+                        messagebox.showerror("Studio workflow", str(result))
+                    else:
+                        self.refresh_queue()
+                        self.status.set("Local draft / review record updated.")
+                        if kind == "processed":
+                            messagebox.showinfo(
+                                "New print PNG", "Reprocessed from original. Approval reset.",
+                            )
                     continue
                 self.generate_button.configure(state="normal")
                 if kind == "success":
@@ -422,24 +444,38 @@ class PODBotApp(tk.Tk):
             return
         platform = self.selected_platform.get()
         if state == "approved":
-            try:
-                report = assess_design(item, platform)
-            except (OSError, ValueError) as exc:
-                messagebox.showerror("Preflight is required", str(exc))
+            if not item.get("rights_confirmed_at"):
+                if not messagebox.askyesno(
+                    "Commercial rights confirmation",
+                    "I confirm I own or hold commercial rights to the artwork, have checked "
+                    "trademarks, current marketplace rules and all listing metadata.",
+                ):
+                    return
+                confirm_rights(item["id"])
+            self.status.set("Running quality and publishing checks...")
+        else:
+            if item.get("platform_status", {}).get(platform) != "approved":
+                messagebox.showerror("Cannot upload", "Approve this design first.")
                 return
-            if report.issues and not messagebox.askyesno(
-                "Quality warnings",
-                "Print preflight found potential issues:\\n\\n"
-                + "\\n".join(report.issues)
-                + "\\n\\nHave you reviewed and explicitly accepted these risks?",
+            if not messagebox.askyesno(
+                "Manual upload confirmation",
+                "Have you personally uploaded this exact design and checked it in "
+                "your seller dashboard?",
             ):
                 return
-        if state == "uploaded" and not messagebox.askyesno(
-            "Manual confirmation", f"Did you PERSONALLY upload this design to {platform}?",
-        ):
-            return
-        update_state(item["id"], platform, state)
-        self.refresh_queue()
+        design_id = item["id"]
+
+        def worker() -> None:
+            try:
+                record = (
+                    approve_listing(design_id, platform) if state == "approved"
+                    else mark_uploaded(design_id, platform, confirmed=True)
+                )
+                self.events.put((state, record))
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.events.put(("studio_error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def open_upload(self) -> None:
         platform = self.selected_platform.get()
@@ -448,6 +484,7 @@ class PODBotApp(tk.Tk):
             "This opens the platform in your browser. PODBot does not use unapproved "
             "automation, submit uploads, handle CAPTCHA, or store login credentials.",
         )
+        webbrowser.open(POLICY_URLS[platform])
         webbrowser.open(UPLOAD_PAGES[platform])
 
     def save_csv(self) -> None:
