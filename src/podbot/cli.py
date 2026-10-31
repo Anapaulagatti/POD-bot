@@ -66,6 +66,7 @@ def main() -> None:
     process = commands.add_parser("process", help="Rebuild cropped transparent canvas")
     process.add_argument("--id", required=True)
     process.add_argument("--rembg", type=Path)
+    process.add_argument("--bg", action="store_true", help="Use rembg Python optional extra")
     process.add_argument("--esrgan", type=Path)
     check = commands.add_parser("audit", help="Run detailed local QC checks")
     check.add_argument("--id", required=True)
@@ -124,7 +125,7 @@ def main() -> None:
         print(mark_uploaded(args.id, args.platform, confirmed=True)["platform_status"])
     elif args.command == "process":
         options = ProcessOptions(
-            remove_background=bool(args.rembg), rembg_binary=args.rembg,
+            remove_background=bool(args.rembg) or args.bg, rembg_binary=args.rembg,
             upscale=bool(args.esrgan), esrgan_binary=args.esrgan,
         )
         print(json.dumps(process_stored_design(args.id, options)["processing"], indent=2))

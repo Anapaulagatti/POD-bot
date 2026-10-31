@@ -60,6 +60,33 @@ def _remove_background(image: Image.Image, tool: Path, model: str) -> Image.Imag
             return processed.convert("RGBA")
 
 
+def _remove_background_python(image: Image.Image, model: str) -> Image.Image:
+    """Use separately installed rembg[cpu]; first call may download selected weights."""
+    if model not in {"isnet-general-use", "birefnet-general", "isnet-anime"}:
+        raise ValueError("Unrecognized rembg model.")
+    try:
+        from rembg import new_session, remove
+    except (ImportError, OSError) as exc:
+        raise RuntimeError(
+            'rembg tool is unavailable. Install the optional extra: pip install -e ".[bg]"'
+        ) from exc
+    session = new_session(model)
+    result = remove(image.convert("RGB"), session=session)
+    if not isinstance(result, Image.Image):
+        raise RuntimeError("rembg returned unsupported image data.")
+    output = result.convert("RGBA")
+    if output.getchannel("A").getextrema()[0] == 255:
+        raise RuntimeError("Background removal produced no transparent region.")
+    return output
+
+
+def background_module_available() -> bool:
+    """Check extras without importing heavy ML packages during GUI startup."""
+    from importlib.util import find_spec
+
+    return find_spec("rembg") is not None
+
+
 def _upscale(image: Image.Image, tool: Path, model: str) -> Image.Image:
     if model not in {"realesrgan-x4plus", "realesrgan-x4plus-anime"}:
         raise ValueError("Unsupported Real-ESRGAN model.")
@@ -117,16 +144,18 @@ def compose_print(image: Image.Image, target: Path, *,
 
 def process_image(image: Image.Image, target: Path, options: ProcessOptions) -> dict:
     """No hidden downloads, fallbacks or destruction of the original source."""
-    if options.remove_background and options.rembg_binary is None:
-        raise RuntimeError("rembg tool is not configured; install it first.")
     if options.upscale and options.esrgan_binary is None:
         raise RuntimeError("Real-ESRGAN tool is not configured; select its EXE first.")
     rgba = image.copy()
     steps = []
     if options.remove_background:
-        tool = _executable(options.rembg_binary, "rembg")
-        rgba = _remove_background(rgba, tool, options.rembg_model)
-        steps.append(f"rembg:{options.rembg_model}")
+        if options.rembg_binary:
+            tool = _executable(options.rembg_binary, "rembg")
+            rgba = _remove_background(rgba, tool, options.rembg_model)
+            steps.append(f"rembg-cli:{options.rembg_model}")
+        else:
+            rgba = _remove_background_python(rgba, options.rembg_model)
+            steps.append(f"rembg-python:{options.rembg_model}")
     if options.upscale:
         tool = _executable(options.esrgan_binary, "Real-ESRGAN")
         rgba = _upscale(rgba, tool, options.esrgan_model)
