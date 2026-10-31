@@ -1,8 +1,8 @@
-# PODBot Studio · 1.0 Preview 2 (Giao diện tiếng Việt)
+# PODBot Studio · 1.0 Preview 3 (Giao diện tiếng Việt)
 
 **Ứng dụng Windows local cho Print-on-Demand.** Tạo ảnh AI, chọn nhà cung cấp, nhập PNG/JPEG/WebP riêng không mất phí ảnh, chuẩn hóa PNG, duyệt QC, chỉnh SEO và hỗ trợ đăng Redbubble/TeePublic theo quy trình **do người dùng xác nhận**.
 
-Phiên bản kỹ thuật `1.0.0rc2` (1.0 Preview 2). Đây là bản thử nghiệm, không phải bản sản xuất đã ký mã. Các bản 4.x trước đây chỉ mang ý nghĩa tên bản thử nghiệm và được giữ trong CHANGELOG để tra cứu.
+Phiên bản kỹ thuật `1.0.0rc3` (1.0 Preview 3). Đây là bản thử nghiệm, không phải bản sản xuất đã ký mã. Các bản 4.x trước đây chỉ mang ý nghĩa tên bản thử nghiệm và được giữ trong CHANGELOG để tra cứu.
 
 ## Bắt đầu trong Windows
 
@@ -47,3 +47,30 @@ python -m pip install -e ".[bg]"
 - **Giới hạn lượt gọi:** mặc định tối đa 3 lượt API *có thể tính phí* / nhà cung cấp / ngày (gồm Gemini SEO). SQLite ghi lượt trước khi gửi API, không hoàn lượt khi lỗi mạng vì nhà cung cấp vẫn có thể tính tiền. Trong GUI → **Cài đặt API**, sửa số lượt 0–100. CLI: `podbot api-limit` hoặc `podbot api-limit --set 2`. Biến môi trường `PODBOT_PAID_CALLS_PER_DAY` nếu có sẽ ưu tiên hơn cấu hình lưu.
 - **Giới hạn USD:** chưa tính được số tiền chính xác bằng tiền. Quota này không phản ánh bill thực tế; cần đặt ngưỡng chi tiêu tại dashboard nhà cung cấp.
 - **Windows Credential Manager:** Chỉ khi bạn bấm **Lưu key vào Windows** và đồng ý, key mới được lưu bằng `keyring`. Nút **Khôi phục key** / **Xóa key đã lưu** hoạt động riêng. Không tự nạp key từ vault khi mở ứng dụng.
+
+## Có gì mới trong Preview 3: tách nền không cần ML
+
+**Xóa nền phẳng ngay trong EXE tiêu chuẩn:** Thư viện → chọn thiết kế → **Xử lý lại ảnh** → chọn **Có** ở hộp thoại "Tách nền phẳng bằng Pillow". Thuật toán tìm màu nền tương đối đồng nhất ở bốn góc và flood-fill các vùng màu tương tự nối với mép, sau đó làm mềm alpha. Chạy offline, không dùng API hoặc weights ML. Nếu bốn góc khác nhau, nền chuyển sắc, hoặc nghi ngờ xóa quá nhiều, ứng dụng từ chối. **Đây không phải bộ nhận diện chủ thể bằng AI**; cần xem kỹ màu áo và chữ/nét trắng sau khi xử lý.
+
+**Prompt dễ xóa nền:** Trang Sáng tạo AI có ô **Thêm gợi ý nền trắng phẳng** bật mặc định, có thể tắt. Nội dung gốc vẫn được lưu; manifest ghi thêm `prompt_sent` và `flat_background_prompt`. Prompt có thể không được model làm theo, nên đây chỉ là trợ giúp, không đảm bảo ảnh trong suốt.
+
+**Di chuyển hash cũ (v1 → v2):**
+
+```powershell
+podbot rehash --dry-run
+podbot rehash
+# Xử lý nền phẳng từ CLI, không gọi mô hình AI:
+podbot process --id YOUR_DESIGN_ID --flat-bg
+# Chỉ thêm gợi ý nền phẳng khi tạo từ CLI:
+podbot create --provider cloudflare --flat-prompt --niche "flowers" --prompt "Original floral artwork" --keywords "flowers,nature"
+```
+
+Rehash đọc file `source.png` bên trong mỗi thư mục thiết kế và ghi lại fingerprint v2 theo kiểu atomic. **Không sửa ảnh, SEO, trạng thái duyệt hoặc quyền thương mại.** Manifest thiếu ảnh nguồn được đếm vào báo cáo lỗi và bỏ qua. Nên sao lưu thư mục dữ liệu trước khi chạy với thư viện lớn.
+
+**Hiệu năng rembg:** Tái sử dụng session đã nạp bằng `lru_cache(maxsize=3)` trong cùng một phiên Python. RemBg vẫn là tùy chọn riêng (ML runtime không nằm trong EXE tiêu chuẩn).
+
+**Hạn mức API:** đếm theo ngày địa phương của máy Windows; reset vào 00:00 theo giờ hệ điều hành. Nếu có `PODBOT_PAID_CALLS_PER_DAY`, ứng dụng hiển thị cảnh báo nó đang ghi đè con số trong Settings. Giới hạn vẫn là số lượt gọi, không phải tiền.
+
+**Đóng gói và phát hành:** Đã thêm workflow khi push tag `v*` để dựng `--onedir` + bản `--onefile`, kiểm tra `pip-audit`, và đăng SHA256SUMS + bản snapshot phiên bản thư viện đã giải quyết trong Release. Xem [Quy trình Release](docs/WINDOWS_RELEASE.md). Workflow chỉ tạo bản phát hành khi một tag phù hợp đã được push và job thành công. Một bản build CI xanh không có nghĩa đã ký mã, không có virus hay thử trên mọi Windows.
+
+**Chưa làm:** OCR, hàng đợi công việc bền vững có hủy/retry, chia UI thành các trang riêng, installer, chữ ký số, khóa phụ thuộc đầy đủ có hash đã commit và thử API bằng key trả phí thực.
