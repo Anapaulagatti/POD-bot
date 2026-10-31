@@ -1,8 +1,8 @@
-# PODBot Studio · 1.0 Preview (Giao diện tiếng Việt)
+# PODBot Studio · 1.0 Preview 2 (Giao diện tiếng Việt)
 
 **Ứng dụng Windows local cho Print-on-Demand.** Tạo ảnh AI, chọn nhà cung cấp, nhập PNG/JPEG/WebP riêng không mất phí ảnh, chuẩn hóa PNG, duyệt QC, chỉnh SEO và hỗ trợ đăng Redbubble/TeePublic theo quy trình **do người dùng xác nhận**.
 
-Phiên bản kỹ thuật `1.0.0rc1` (1.0 Preview 1). Đây là bản thử nghiệm, không phải bản sản xuất đã ký mã. Các bản 4.x trước đây chỉ mang ý nghĩa tên bản thử nghiệm và được giữ trong CHANGELOG để tra cứu.
+Phiên bản kỹ thuật `1.0.0rc2` (1.0 Preview 2). Đây là bản thử nghiệm, không phải bản sản xuất đã ký mã. Các bản 4.x trước đây chỉ mang ý nghĩa tên bản thử nghiệm và được giữ trong CHANGELOG để tra cứu.
 
 ## Bắt đầu trong Windows
 
