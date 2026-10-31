@@ -59,3 +59,12 @@ Không chia sẻ token, cookie, mật khẩu GitHub, Redbubble hay TeePublic tro
 - CLI: `podbot trends --country US --limit 10`, `podbot preflight --id DESIGN_ID --platform teepublic`, `podbot mockup --id DESIGN_ID`.
 - Kiểm tra tài liệu kích thước theo sàn trong [MARKETPLACE_REQUIREMENTS.md](MARKETPLACE_REQUIREMENTS.md).
 - ECC chỉ được thêm như skill phát triển **project-local**. Muốn cài toàn bộ plugin vào Claude Code, đọc [ECC_INTEGRATION.md](ECC_INTEGRATION.md) và tránh cài song song hai phương thức trùng nhau.
+
+## Release 0.3
+
+- **Process PNG**: tùy chọn tách nền bằng rembg hoặc upscale Real-ESRGAN đã cài riêng, hoàn toàn không bắt buộc. Chọn No cho bước tách nền/upscale nếu muốn crop và tạo canvas bằng Pillow.
+- **Preflight** báo PASS/WARN/FAIL, chỉ duyệt thiết kế không có FAIL và đã xác nhận quyền thương mại.
+- **4 colors** tạo ảnh xem trước trên áo trắng/đen/navy/xám.
+- **Edit Blocklist** mở file từ khóa do bạn tự quản lý. Đây không phải cơ sở dữ liệu thương hiệu chính thức.
+- **Approve** kiểm tra quyền tác giả + chất lượng; **Export CSV** chỉ chứa thiết kế approved; **Mark Uploaded** chỉ ghi trạng thái sau khi bạn đã đăng thủ công trên sàn.
+- Xem chi tiết tại [PUBLISHING_POLICY.md](PUBLISHING_POLICY.md).

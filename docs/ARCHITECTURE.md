@@ -22,3 +22,7 @@
 ## Release integrity
 
 Windows CI runs on clean GitHub-hosted Windows runner. PyInstaller produces a one-file .exe; it's an executable packaging tool, not an installer or code-signing certificate. Never distribute an unsigned, unscanned EXE as a verified production binary.
+
+## Release 0.3
+
+See [PUBLISHING_POLICY.md](PUBLISHING_POLICY.md). Optional external rembg and Real-ESRGAN, output provenance, QC failures that prevent approval, human ownership confirmation, approved-only CSV and manual upload confirmation. No marketplace passwords, CAPTCHA bypass or unattended publishing.

@@ -31,7 +31,7 @@ UPLOAD_PAGES = {
 class PODBotApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("PODBot Studio v0.2 | Local-first")
+        self.title("PODBot Studio v0.3 | Local-first")
         self.geometry("980x720")
         self.minsize(780, 600)
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -96,7 +96,7 @@ class PODBotApp(tk.Tk):
         self.generate_button.pack(anchor="w", pady=(15, 10))
         ttk.Label(
             tab,
-            text=("Creates one design per click. The print canvas is 4500 x 5400 px. "
+            text=("Creates one design per click. The print canvas is 5000 x 5500 px. "
                   "AI output may have an opaque background or insufficient detail. "
                   "Inspect before uploading."),
             wraplength=840,
