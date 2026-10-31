@@ -695,6 +695,12 @@ class PODBotDesktop(ctk.CTk):
             while True:
                 kind, result = self.events.get_nowait()
                 self.busy = False
+                if kind == "quality":
+                    messagebox.showinfo(
+                        "Kết quả kiểm tra chất lượng",
+                        str(result) + "\n\nCác kiểm tra FAIL cần xử lý trước khi phê duyệt.",
+                    )
+                    continue
                 if kind == "ok":
                     self.message.set("✓  Đã hoàn tất. Dữ liệu được lưu trên máy.")
                     self.refresh()
