@@ -4,6 +4,7 @@ import base64
 import io
 import urllib.error
 from pathlib import Path
+
 import pytest
 from PIL import Image
 
