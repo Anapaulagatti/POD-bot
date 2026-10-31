@@ -47,6 +47,9 @@ CATALOG = (
     ModelSpec("gemini-flash-lite", "Gemini · 3.1 Flash Lite Image (paid)", "gemini",
               "gemini-3.1-flash-lite-image", "GEMINI_API_KEY", True,
               "Fast, native 1K image output; token billed."),
+    ModelSpec("gemini-nano-2-1", "Gemini · Nano Banana 2.1 (paid)", "gemini",
+              "gemini-nano-banana-2.1", "GEMINI_API_KEY", True,
+              "Current high-quality Gemini image model; token billed."),
     ModelSpec("gemini-flash", "Gemini · 3.1 Flash Image (paid)", "gemini",
               "gemini-3.1-flash-image", "GEMINI_API_KEY", True,
               "Supports 1K/2K/4K with eligible paid account."),
@@ -166,7 +169,7 @@ class GeminiImage:
         if not self.key:
             raise ValueError("Gemini API key is required.")
         allowed = {"gemini-3.1-flash-lite-image", "gemini-3.1-flash-image",
-                   "gemini-3-pro-image"}
+                   "gemini-3-pro-image", "gemini-nano-banana-2.1"}
         if self.model not in allowed:
             raise ValueError("Gemini image model is not supported.")
         if self.size not in {"1K", "2K", "4K"}:

@@ -18,7 +18,7 @@ def png64() -> str:
 
 
 def test_all_image_choices_have_distinct_model_ids_and_cost_flags():
-    assert len(catalog.CATALOG) >= 12
+    assert len(catalog.CATALOG) >= 14
     assert len(catalog.MODELS) == len(catalog.CATALOG)
     assert len({entry.label for entry in catalog.CATALOG}) == len(catalog.CATALOG)
     assert catalog.get_spec("gemini-pro").model == "gemini-3-pro-image"
@@ -212,3 +212,10 @@ def test_bad_local_file_rejected_before_creating_design(tmp_path):
     with pytest.raises(ValueError, match="Only PNG"):
         import_design(fake, "flowers", root=tmp_path / "designs")
     assert not (tmp_path / "designs").exists()
+
+
+
+def test_new_gemini_nano_banana_2_1_is_officially_registered():
+    spec = catalog.get_spec("gemini-nano-2-1")
+    assert spec.model == "gemini-nano-banana-2.1"
+    assert spec.paid

@@ -9,6 +9,7 @@ Verified against official provider documentation on 2026-10-31. Pricing, quotas 
 | cloudflare | Cloudflare Workers AI | flux-1-schnell | CLOUDFLARE_API_TOKEN (+ ACCOUNT_ID) | Limited free or account billing |
 | huggingface | Hugging Face | FLUX.1-schnell | HF_TOKEN | Small free credit or billable |
 | gemini-flash-lite | Google | gemini-3.1-flash-lite-image | GEMINI_API_KEY | Paid, 1K |
+| gemini-nano-2-1 | Google | gemini-nano-banana-2.1 | GEMINI_API_KEY | Paid, 1K/2K/4K |
 | gemini-flash | Google | gemini-3.1-flash-image | GEMINI_API_KEY | Paid, 1K/2K/4K |
 | gemini-pro | Google | gemini-3-pro-image | GEMINI_API_KEY | Paid, 1K/2K/4K |
 | openai-flare | OpenAI | gpt-image-2.5-flare | OPENAI_API_KEY | Paid, transparent PNG |
