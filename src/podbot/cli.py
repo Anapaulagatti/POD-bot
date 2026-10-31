@@ -17,6 +17,7 @@ from podbot.processing import ProcessOptions, process_stored_design
 from podbot.provider_catalog import CATALOG, MODELS, get_spec, make_provider
 from podbot.publishing import approve_listing, confirm_rights, mark_uploaded
 from podbot.quality import assess_design
+from podbot.rehash import rehash_designs
 from podbot.storage import export_csv, list_designs, update_state
 from podbot.trends import read_trends
 
@@ -32,6 +33,7 @@ def main() -> None:
     create.add_argument("--paid-ok", action="store_true",
                         help="Authorize one potentially billed image generation")
     create.add_argument("--gemini-size", choices=["1K", "2K", "4K"], default="2K")
+    create.add_argument("--flat-prompt", action="store_true", help="Append flat white background guidance")
     create.add_argument("--seo", choices=["local", "gemini"], default="local")
     import_cmd = commands.add_parser("import", help="Import a local design without image API")
     import_cmd.add_argument("--file", type=Path, required=True)
@@ -70,7 +72,10 @@ def main() -> None:
     process.add_argument("--id", required=True)
     process.add_argument("--rembg", type=Path)
     process.add_argument("--bg", action="store_true", help="Use rembg Python optional extra")
+    process.add_argument("--flat-bg", action="store_true", help="Remove a flat background with Pillow")
     process.add_argument("--esrgan", type=Path)
+    rehash = commands.add_parser("rehash", help="Migrate legacy fingerprints from source.png")
+    rehash.add_argument("--dry-run", action="store_true")
     check = commands.add_parser("audit", help="Run detailed local QC checks")
     check.add_argument("--id", required=True)
     check.add_argument("--platform", choices=["redbubble", "teepublic"], required=True)
@@ -86,7 +91,8 @@ def main() -> None:
             gemini_size=args.gemini_size,
         )
         record = create_draft(
-            args.prompt, args.niche, args.keywords, provider, seo_mode=args.seo
+            args.prompt, args.niche, args.keywords, provider, seo_mode=args.seo,
+            flat_background_prompt=args.flat_prompt,
         )
         print(json.dumps(record, indent=2, ensure_ascii=False))
     elif args.command == "import":
@@ -96,6 +102,8 @@ def main() -> None:
         if args.set is not None:
             set_daily_limit(args.set)
         print(f"Daily potential-billing calls per provider: {get_daily_limit()}")
+    elif args.command == "rehash":
+        print(json.dumps(rehash_designs(dry_run=args.dry_run), indent=2))
     elif args.command == "models":
         for spec in CATALOG:
             print(f"{spec.id}: {spec.label} [{spec.env_key}] — {spec.hint}")
@@ -133,6 +141,7 @@ def main() -> None:
     elif args.command == "process":
         options = ProcessOptions(
             remove_background=bool(args.rembg) or args.bg, rembg_binary=args.rembg,
+            flat_background=args.flat_bg,
             upscale=bool(args.esrgan), esrgan_binary=args.esrgan,
         )
         print(json.dumps(process_stored_design(args.id, options)["processing"], indent=2))

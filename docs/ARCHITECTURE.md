@@ -12,6 +12,9 @@ CustomTkinter GUI tiếng Việt (modern_app.py) / CLI
   ├─ audit.py             →  CHÍNH SÁCH QC DUY NHẤT + fingerprint gray/alpha
   ├─ quality.py           →  adapter tương thích các bản cũ, không có ngưỡng riêng
   ├─ publishing.py        →  quyền thương mại + QC + approved + CSV + manual uploaded
+  ├─ flat_background.py    →  Pillow flood-fill nền phẳng, không cần ML
+  ├─ prompting.py         →  Prompt suffix opt-in, không sửa SEO gốc
+  ├─ rehash.py            →  Migrate fingerprint v1 từ source.png, giữ nguyên duyệt
   └─ storage.py           →  ghi manifest atomic, sửa SEO/ảnh sẽ reset duyệt cũ
 ```
 
@@ -24,3 +27,10 @@ CustomTkinter GUI tiếng Việt (modern_app.py) / CLI
 - CI trên Windows chạy pytest, Ruff, PyInstaller và smoke-check tồn tại EXE; chưa kiểm tra GUI thủ công ở mọi DPI.
 
 Xem [README](../README.md) và [chính sách xuất bản](PUBLISHING_POLICY.md).
+
+## Preview 3 bổ sung
+
+- Xử lý nền phẳng qua Pillow chỉ khi người dùng yêu cầu; có từ chối an toàn với nền không đồng nhất, cần kiểm tra trực quan. Chạy được trong EXE vì Pillow là dependency chính.
+- `_rembg_session` cache tối đa 3 model trong một phiên để tránh tạo session liên tục.
+- `api_limits.py` tính ngày bằng giờ hệ điều hành local (reset 00:00 local), GUI cảnh báo `PODBOT_PAID_CALLS_PER_DAY` ghi đè.
+- Release workflow ở `.github/workflows/release-windows.yml`, có SHA256 và snapshot dependency; không thay thế code signing hoặc lock đã commit.

@@ -8,14 +8,18 @@ from __future__ import annotations
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageFilter, ImageOps
+
+from podbot.flat_background import remove_flat_background
 
 
 @dataclass(frozen=True)
 class ProcessOptions:
     remove_background: bool = False
+    flat_background: bool = False
     rembg_binary: Path | None = None
     rembg_model: str = "isnet-general-use"
     upscale: bool = False
@@ -60,17 +64,24 @@ def _remove_background(image: Image.Image, tool: Path, model: str) -> Image.Imag
             return processed.convert("RGBA")
 
 
+@lru_cache(maxsize=3)
+def _rembg_session(model: str):
+    from rembg import new_session
+
+    return new_session(model)
+
+
 def _remove_background_python(image: Image.Image, model: str) -> Image.Image:
     """Use separately installed rembg[cpu]; first call may download selected weights."""
     if model not in {"isnet-general-use", "birefnet-general", "isnet-anime"}:
         raise ValueError("Unrecognized rembg model.")
     try:
-        from rembg import new_session, remove
+        from rembg import remove
     except (ImportError, OSError) as exc:
         raise RuntimeError(
             'rembg tool is unavailable. Install the optional extra: pip install -e ".[bg]"'
         ) from exc
-    session = new_session(model)
+    session = _rembg_session(model)
     result = remove(image.convert("RGB"), session=session)
     if not isinstance(result, Image.Image):
         raise TypeError("rembg returned unsupported image data.")
@@ -146,8 +157,13 @@ def process_image(image: Image.Image, target: Path, options: ProcessOptions) -> 
     """No hidden downloads, fallbacks or destruction of the original source."""
     if options.upscale and options.esrgan_binary is None:
         raise RuntimeError("Real-ESRGAN tool is not configured; select its EXE first.")
+    if options.flat_background and options.remove_background:
+        raise ValueError("Select either Pillow flat cutout or rembg, not both.")
     rgba = image.copy()
     steps = []
+    if options.flat_background:
+        rgba = remove_flat_background(rgba)
+        steps.append("pillow-edge-flood-v1")
     if options.remove_background:
         if options.rembg_binary:
             tool = _executable(options.rembg_binary, "rembg")

@@ -12,6 +12,7 @@ from PIL import Image
 
 from podbot.audit import audit_image, find_blocked_terms, fingerprint, get_blocklist
 from podbot.processing import compose_print
+from podbot.prompting import prepare_image_prompt
 from podbot.providers import ImageProvider
 from podbot.seo import SEOMetadata, gemini_seo, local_seo
 from podbot.settings import designs_directory
@@ -38,6 +39,7 @@ def create_draft(
     seo_mode: str = "local",
     gemini_key: str = "",
     root: Path | None = None,
+    *, flat_background_prompt: bool = False,
 ) -> dict:
     prompt = prompt.strip()
     if len(prompt) < 5:
@@ -52,7 +54,8 @@ def create_draft(
         metadata = gemini_seo(niche, keywords, prompt, gemini_key)
     else:
         metadata = local_seo(niche, keywords, prompt)
-    image = provider.generate(prompt)
+    image_prompt = prepare_image_prompt(prompt, flat_background=flat_background_prompt)
+    image = provider.generate(image_prompt)
     if image.width > 20000 or image.height > 20000:
         raise ValueError("Input image dimensions exceed the safe processing limit.")
     design_id = uuid.uuid4().hex
@@ -69,6 +72,8 @@ def create_draft(
             "id": design_id,
             "created_at": datetime.now(UTC).isoformat(),
             "prompt": prompt,
+            "prompt_sent": image_prompt,
+            "flat_background_prompt": flat_background_prompt,
             "niche": niche.strip(),
             "keywords": keywords.strip(),
             "provider": provider.name,

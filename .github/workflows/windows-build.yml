@@ -22,6 +22,12 @@ jobs:
         run: python -m compileall -q src
       - name: Lint
         run: python -m ruff check src tests
+      - name: Build portable folder EXE and archive it
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
+          if (!(Test-Path "dist/PODBot/PODBot.exe")) { throw "Missing onedir EXE" }
+          Compress-Archive -Path "dist/PODBot" -DestinationPath "dist/PODBot-windows-onedir.zip"
       - name: Build single-file EXE
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
       - name: Smoke-check Windows EXE output
@@ -35,4 +41,9 @@ jobs:
         with:
           name: PODBot-windows-exe
           path: dist/PODBot.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PODBot-windows-onedir
+          path: dist/PODBot-windows-onedir.zip
           if-no-files-found: error

@@ -48,3 +48,11 @@ Phiên bản này chuyển giao diện mặc định sang tiếng Việt với k
 Xem [UI_REDESIGN_VI.md](UI_REDESIGN_VI.md) để biết lý do chọn CustomTkinter và đánh giá các repository khác.
 
 **Trạng thái thử nghiệm:** CI kiểm tra source/test/build trên Windows. Chưa thể xác nhận giao diện hoạt động ở mọi DPI/cấu hình Windows và cần thử trực tiếp trên máy người dùng.
+
+## Tách nền nhanh trong EXE Preview 3
+
+Tại **Thư viện → Xử lý lại ảnh**, chọn **Có** ở lựa chọn tách nền phẳng bằng Pillow để thử với ảnh có nền trắng/màu đơn sắc. Sau khi xử lý, xem lại PNG, ảnh trên bốn màu áo, kiểm tra halo/chữ nhỏ và duyệt lại nếu đạt. Với nền nhiều chi tiết, dùng rembg tùy chọn hoặc xử lý bằng phần mềm đồ họa. Tách nền không được tự kích hoạt khi phát sinh phí AI.
+
+Tại **Sáng tạo AI**, bật/tắt ô thêm gợi ý nền trắng phẳng. Với thư viện cũ, CLI `podbot rehash --dry-run` và `podbot rehash` giúp tính lại fingerprint v2 mà không thay đổi trạng thái duyệt.
+
+Hạn mức API tính theo **00:00 giờ local của Windows**; nếu có biến môi trường ghi đè, trang Cài đặt sẽ hiển thị cảnh báo.

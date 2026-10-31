@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0rc3 · 1.0 Preview 3 (31/10/2026)
+- Tách nền màu phẳng bằng Pillow flood-fill từ mép, không cần model/rembg trong EXE.
+- Ô bật/tắt thêm gợi ý nền trắng phẳng vào prompt AI, vẫn lưu prompt gốc.
+- Lệnh `podbot rehash` để cập nhật hash v1 từ source.png, giữ nguyên bản quyền/SEO/duyệt.
+- Cache session rembg trong phiên, không khởi tạo lại cùng model mỗi ảnh.
+- Tính giới hạn API theo ngày local trên Windows; cảnh báo env override.
+- Thêm workflow GitHub Release theo tag v*, SHA256, onedir và onefile, pip-audit và snapshot dependency cho release.
+- OCR/SQLite task queue/installer/code signing/live paid API tests vẫn ở roadmap.
+
+
 ## 1.0.0rc2 · 1.0 Preview 2
 - SQLite bảo vệ lượt gọi API có thể tính phí theo provider, mặc định 3 lần/ngày; không cam kết giới hạn USD.
 - Windows Credential Manager qua keyring, chỉ lưu/khôi phục/xóa API key khi người dùng chủ động chọn.
