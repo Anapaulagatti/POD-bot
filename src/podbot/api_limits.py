@@ -73,26 +73,30 @@ def reserve_paid_request(provider: str, *, day: str | None = None) -> int:
     folder = data_directory()
     folder.mkdir(parents=True, exist_ok=True)
     try:
-        with sqlite3.connect(folder / "paid_api_attempts.sqlite3", timeout=10) as db:
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS api_attempts ("
-                "id INTEGER PRIMARY KEY, provider TEXT NOT NULL, day TEXT NOT NULL, "
-                "created_at TEXT NOT NULL)"
-            )
-            db.execute("BEGIN IMMEDIATE")
-            current = db.execute(
-                "SELECT COUNT(*) FROM api_attempts WHERE provider = ? AND day = ?",
-                (provider, today),
-            ).fetchone()[0]
-            if current >= limit:
-                raise PermissionError(
-                    f"Local daily attempt cap reached for {provider}: {limit} calls. "
-                    "Adjust your cap after reviewing provider billing."
+        db = sqlite3.connect(folder / "paid_api_attempts.sqlite3", timeout=10)
+        try:
+            with db:
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS api_attempts ("
+                    "id INTEGER PRIMARY KEY, provider TEXT NOT NULL, day TEXT NOT NULL, "
+                    "created_at TEXT NOT NULL)"
                 )
-            db.execute(
-                "INSERT INTO api_attempts(provider, day, created_at) VALUES(?, ?, ?)",
-                (provider, today, datetime.now(UTC).isoformat()),
-            )
-            return current + 1
+                db.execute("BEGIN IMMEDIATE")
+                current = db.execute(
+                    "SELECT COUNT(*) FROM api_attempts WHERE provider = ? AND day = ?",
+                    (provider, today),
+                ).fetchone()[0]
+                if current >= limit:
+                    raise PermissionError(
+                        f"Local daily attempt cap reached for {provider}: {limit} calls. "
+                        "Adjust your cap after reviewing provider billing."
+                    )
+                db.execute(
+                    "INSERT INTO api_attempts(provider, day, created_at) VALUES(?, ?, ?)",
+                    (provider, today, datetime.now(UTC).isoformat()),
+                )
+                return current + 1
+        finally:
+            db.close()
     except sqlite3.Error as exc:
         raise RuntimeError("Cannot record paid request usage; blocked to avoid untracked billing.") from exc
