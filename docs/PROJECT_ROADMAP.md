@@ -1,6 +1,6 @@
 # PODBot development roadmap (user-supplied specification)
 
-State as of October 31, 2026; implemented means code/tests exist, not proven marketplace success.
+Historical roadmap from v0.3. For the currently active v4.x roadmap, see [ROADMAP_V4.md](ROADMAP_V4.md). Implemented means code/tests exist, not proven marketplace success.
 
 | Milestone | Status | Details |
 |---|---|---|

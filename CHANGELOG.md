@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.0 (2026-10-31, provider marketplace preview)
+- Added 14 manually selectable image models: Gemini 3.1 Flash/Lite, 3 Pro, Nano Banana 2.1; OpenAI GPT Image 2.5 Flare/Sunburst; Replicate FLUX; fal.ai FLUX2/Z-Image; Stability Core/Ultra; retained Cloudflare/HF.
+- Paid model consent in the desktop UI and --paid-ok for CLI, no silent provider fallbacks.
+- Added personal PNG/JPEG/WebP import without image API usage.
+- Added URL/size validation for remote image results, API response contract tests with HTTP mocks.
+- Added provider API reference, 15-source licensing research and phased roadmap.
+- No claim of live paid API coverage, signed release, automatic marketplace publishing or unlimited free-tier access.
+
+
 ## 0.3.0 (2026-10-31)
 - Optional external rembg/Real-ESRGAN processing; safe alpha-cropped 5000 x 5500 PNG output.
 - Four-color apparel previews and image audit with approval-blocking errors.

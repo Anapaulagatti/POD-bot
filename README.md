@@ -1,4 +1,4 @@
-# PODBot Studio (MVP 0.3.0)
+# PODBot Studio 4.0.0 (developer preview)
 
 **Local-first Windows Print-On-Demand studio:** generate original AI design drafts, prepare transparent-canvas PNG files, create SEO metadata, review drafts for Redbubble and TeePublic, then upload manually. Written in Python, designed to become a single `PODBot.exe`.
 
@@ -6,10 +6,10 @@
 
 ## What works
 
-- Native Tkinter desktop GUI with three tabs: AI Design + SEO, Publishing Queue, API Settings.
-- Cloudflare Workers AI FLUX.1-schnell provider and optional Hugging Face provider.
+- Native Tkinter desktop GUI with AI Design + SEO, Publishing Queue, Trend Research and API Settings tabs.
+- 14 user-selectable image models across Cloudflare, Hugging Face, Google Gemini, OpenAI, Replicate, fal.ai and Stability AI; see [Model marketplace](docs/PROVIDER_MARKETPLACE_V4.md).
 - Deterministic offline SEO or optional Gemini REST SEO (depending on availability/quota).
-- Generate one design per click, with a rights-confirmation prompt.
+- Generate one design per click with explicit rights and paid-API confirmation; import your own PNG/JPEG/WebP without AI fees.
 - Save source PNG and a 5000×5500 px PNG on a transparent canvas; retain metadata in a JSON manifest.
 - Local review queue with platform-specific draft, approved and manually uploaded states.
 - Export editable CSV metadata and open official upload pages in the user's browser.
@@ -98,3 +98,15 @@ podbot uploaded --id DESIGN_ID --platform redbubble --confirm
 ```
 
 **A successful Windows build is not a print proof or a signed/fully smoke-tested desktop release.**
+
+## New in version 4.0.0: Model Marketplace and local import
+
+Choose from 14 image models in the AI Design + SEO tab. Enter only the key for your chosen provider in API Settings, and review the explicit potentially billable API confirmation. No silent paid fallback or retries. On the CLI, use --paid-ok per image request, or run "podbot models" to see available models and required environment variable names.
+
+Bring your own designs from local PNG/JPEG/WebP with the new Import button, or use "podbot import --file PATH --niche NATURE" from terminal. Local file importing skips the paid image-generation API. It still runs existing SEO, PNG preparation, copyright confirmation and marketplace QC. Each asset remains a draft until reviewed.
+
+The current code has mocked vendor API tests and a GitHub-hosted Windows build. It has **not** been tested with your paid Gemini/OpenAI/Replicate/fal/Stability credentials and is not a signed installer. The provider model/API contract and credit balance must be validated through your own provider dashboard.
+
+**Research and strategy:** [15 inspected repositories with licenses and priorities](docs/REPOSITORY_RESEARCH_V4.md), [4.x roadmap](docs/ROADMAP_V4.md). The old release roadmap remains archived for context.
+
+The Redbubble/TeePublic workflow still requires human review and upload. No login automation, CAPTCHA handling or unattended bulk posting is included.
