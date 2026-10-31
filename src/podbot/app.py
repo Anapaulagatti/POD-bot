@@ -183,7 +183,7 @@ class PODBotApp(tk.Tk):
             try:
                 record = create_draft(prompt, niche, keywords, provider, mode, key)
                 self.events.put(("success", record))
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001; show errors in UI worker
                 self.events.put(("error", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -257,7 +257,7 @@ class PODBotApp(tk.Tk):
         if item:
             folder = Path(item["print_file"]).parent
             if os.name == "nt":
-                os.startfile(folder)  # noqa: S606; native Windows file viewer
+                os.startfile(folder)  # native Windows file viewer
             else:
                 webbrowser.open(folder.as_uri())
 

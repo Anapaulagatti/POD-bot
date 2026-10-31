@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -13,7 +14,6 @@ from podbot.providers import ImageProvider
 from podbot.seo import SEOMetadata, gemini_seo, local_seo
 from podbot.settings import designs_directory
 from podbot.storage import save_manifest
-
 
 PRINT_SIZE = (4500, 5400)
 
@@ -67,7 +67,7 @@ def create_draft(
         original_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
         record = {
             "id": design_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "prompt": prompt,
             "niche": niche.strip(),
             "keywords": keywords.strip(),
@@ -91,6 +91,5 @@ def create_draft(
         return record
     except Exception:
         # A failed draft must not appear in the queue.
-        import shutil
         shutil.rmtree(folder, ignore_errors=True)
         raise

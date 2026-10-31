@@ -10,7 +10,6 @@ from pathlib import Path
 
 from podbot.settings import designs_directory
 
-
 ALLOWED_STATES = {"draft", "approved", "uploaded"}
 
 

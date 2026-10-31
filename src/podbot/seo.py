@@ -7,7 +7,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 
 @dataclass
