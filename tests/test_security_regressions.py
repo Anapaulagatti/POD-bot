@@ -1,6 +1,5 @@
 """Security regressions: API response caps, rembg opt-in, no API key disclosure."""
 
-import io
 import json
 import sys
 import types
