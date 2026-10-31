@@ -6,7 +6,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 from podbot.audit import audit_image, find_blocked_terms, fingerprint, make_color_preview
-from podbot.processing import compose_print, process_image, ProcessOptions
+from podbot.processing import ProcessOptions, compose_print, process_image
 from podbot.publishing import approve_listing, confirm_rights, export_approved_csv
 from podbot.storage import list_designs, update_seo
 

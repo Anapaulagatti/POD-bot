@@ -16,11 +16,10 @@ from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_co
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.processing import ProcessOptions, process_stored_design
-from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
-from podbot.quality import assess_design
+from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
 from podbot.settings import data_directory
-from podbot.storage import export_csv, list_designs, update_seo, update_state
+from podbot.storage import export_csv, list_designs, update_seo
 from podbot.trends import read_trends
 
 UPLOAD_PAGES = {
@@ -248,7 +247,7 @@ class PODBotApp(tk.Tk):
         )
         mode = "gemini" if self.seo_choice.get() == "Gemini AI SEO" else "local"
         niche, keywords, key = self.niche.get(), self.keywords.get(), self.gemini_key.get()
-        if matches := find_blocked_terms(" ".join((prompt, niche, keywords)), get_blocklist()):
+        if matches := find_blocked_terms(f"{prompt} {niche} {keywords}", get_blocklist()):
             messagebox.showerror("Blocklist", "Review these terms: " + ", ".join(matches))
             return
         self.generate_button.configure(state="disabled")

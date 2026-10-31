@@ -50,7 +50,7 @@ def create_draft(
         raise ValueError("Please enter a descriptive prompt (minimum 5 characters).")
     if seo_mode not in {"local", "gemini"}:
         raise ValueError("Unknown SEO mode.")
-    blocked = find_blocked_terms(" ".join((prompt, niche, keywords)), get_blocklist())
+    blocked = find_blocked_terms(f"{prompt} {niche} {keywords}", get_blocklist())
     if blocked:
         raise ValueError("blocklist requires review: " + ", ".join(blocked[:5]))
     # Validate metadata and tokens before any costly image request.
