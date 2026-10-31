@@ -12,12 +12,20 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image
 
+from podbot.audit import (
+    audit_image,
+    find_blocked_terms,
+    get_blocklist,
+    make_color_preview,
+    near_duplicates,
+)
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
+from podbot.processing import ProcessOptions, process_stored_design
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
-from podbot.quality import assess_design
+from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
 from podbot.settings import data_directory
-from podbot.storage import export_csv, list_designs, update_seo, update_state
+from podbot.storage import export_csv, list_designs, update_seo
 from podbot.trends import read_trends
 
 UPLOAD_PAGES = {
@@ -29,7 +37,7 @@ UPLOAD_PAGES = {
 class PODBotApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("PODBot Studio v0.2 | Local-first")
+        self.title("PODBot Studio v0.3 | Local-first")
         self.geometry("980x720")
         self.minsize(780, 600)
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -94,7 +102,7 @@ class PODBotApp(tk.Tk):
         self.generate_button.pack(anchor="w", pady=(15, 10))
         ttk.Label(
             tab,
-            text=("Creates one design per click. The print canvas is 4500 x 5400 px. "
+            text=("Creates one design per click. The print canvas is 5000 x 5500 px. "
                   "AI output may have an opaque background or insufficient detail. "
                   "Inspect before uploading."),
             wraplength=840,
@@ -116,6 +124,8 @@ class PODBotApp(tk.Tk):
         ttk.Button(actions, text="Refresh", command=self.refresh_queue).pack(side="left", padx=3)
         ttk.Button(actions, text="Open PNG", command=self.open_selected).pack(side="left", padx=3)
         ttk.Button(actions, text="Preflight", command=self.preflight).pack(side="left", padx=3)
+        ttk.Button(actions, text="Process PNG", command=self.process_selected).pack(side="left", padx=3)
+        ttk.Button(actions, text="4 colors", command=self.preview_colors).pack(side="left", padx=3)
         ttk.Button(actions, text="Edit SEO", command=self.edit_seo).pack(side="left", padx=3)
         ttk.Button(actions, text="T-shirt mockup", command=self.create_mockup).pack(
             side="left", padx=3
@@ -138,6 +148,9 @@ class PODBotApp(tk.Tk):
             side="left", padx=3
         )
         ttk.Button(second, text="Export queue to CSV", command=self.save_csv).pack(
+            side="left", padx=3
+        )
+        ttk.Button(second, text="Edit Blocklist", command=self.edit_blocklist).pack(
             side="left", padx=3
         )
         self.details = tk.Text(tab, height=9, wrap="word")
@@ -240,6 +253,9 @@ class PODBotApp(tk.Tk):
         )
         mode = "gemini" if self.seo_choice.get() == "Gemini AI SEO" else "local"
         niche, keywords, key = self.niche.get(), self.keywords.get(), self.gemini_key.get()
+        if matches := find_blocked_terms(f"{prompt} {niche} {keywords}", get_blocklist()):
+            messagebox.showerror("Blocklist", "Review these terms: " + ", ".join(matches))
+            return
         self.generate_button.configure(state="disabled")
         self.status.set("Generating... Your desktop remains responsive.")
 
@@ -271,6 +287,17 @@ class PODBotApp(tk.Tk):
                     else:
                         self.status.set("Trend RSS unavailable.")
                         messagebox.showerror("Trend research error", str(result))
+                    continue
+                if kind in {"processed", "approved", "uploaded", "studio_error"}:
+                    if kind == "studio_error":
+                        messagebox.showerror("Studio workflow", str(result))
+                    else:
+                        self.refresh_queue()
+                        self.status.set("Local draft / review record updated.")
+                        if kind == "processed":
+                            messagebox.showinfo(
+                                "New print PNG", "Reprocessed from original. Approval reset.",
+                            )
                     continue
                 self.generate_button.configure(state="normal")
                 if kind == "success":
@@ -347,16 +374,21 @@ class PODBotApp(tk.Tk):
             return
         platform = self.selected_platform.get()
         try:
-            report = assess_design(item, platform)
+            with Image.open(item["print_file"]) as asset:
+                checks = audit_image(asset, platform)
         except (OSError, ValueError) as exc:
             messagebox.showerror("Preflight error", str(exc))
             return
-        notes = "\n".join(report.issues) if report.issues else "No automatic warnings detected."
+        summary = "\\n".join(
+            f"{check.level.upper()} | {check.name}: {check.value} | {check.message}"
+            for check in checks
+        )
+        matched = near_duplicates(item, list(self.records.values()))
+        if matched:
+            summary += "\nWARN | Similar local design IDs: " + ", ".join(matched[:5])
         messagebox.showinfo(
-            f"Print preflight: {platform}",
-            f"Canvas: {report.canvas_size[0]} x {report.canvas_size[1]}\n"
-            f"Artwork: {report.artwork_size[0]} x {report.artwork_size[1]}\n\n"
-            f"{notes}\n\nAutomated checks cannot guarantee print quality or IP clearance.",
+            f"Print / QC: {platform}",
+            summary + "\\n\\nEvery FAIL blocks approval. Warnings require human review.",
         )
 
     def create_mockup(self) -> None:
@@ -416,38 +448,144 @@ class PODBotApp(tk.Tk):
 
         ttk.Button(frame, text="Save metadata", command=save).pack(anchor="e", pady=12)
 
+    def edit_blocklist(self) -> None:
+        path = data_directory() / "blocklist.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text(
+                "# User-maintained risk terms; one phrase per line. Not a trademark registry.\n",
+                encoding="utf-8",
+            )
+        if os.name == "nt":
+            os.startfile(path)
+        else:
+            webbrowser.open(path.as_uri())
+
+    def preview_colors(self) -> None:
+        item = self.selected()
+        if not item:
+            return
+        target = Path(item["print_file"]).parent / "preview-4-colors.png"
+        try:
+            with Image.open(item["print_file"]) as original:
+                thumbnail = original.copy()
+                thumbnail.thumbnail((1000, 1000))
+                make_color_preview(thumbnail, target)
+            webbrowser.open(target.as_uri())
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Preview", str(exc))
+
+    def process_selected(self) -> None:
+        item = self.selected()
+        if not item:
+            return
+        use_bg = messagebox.askyesno(
+            "Optional background removal",
+            "Use a separately installed rembg executable? It may download its model "
+            "on first run. No models are included in PODBot.exe. Choose No to crop only.",
+        )
+        rembg_binary = None
+        if use_bg:
+            path = filedialog.askopenfilename(
+                title="Select installed rembg.exe",
+                filetypes=[("Executable", "*.exe"), ("All files", "*")],
+            )
+            if not path:
+                return
+            rembg_binary = Path(path)
+        use_sr = messagebox.askyesno(
+            "Optional AI upscale",
+            "Use an external realesrgan-ncnn-vulkan.exe, separately downloaded by you? "
+            "Choose No for ordinary Lanczos scaling.",
+        )
+        sr_binary = None
+        if use_sr:
+            path = filedialog.askopenfilename(
+                title="Select Real-ESRGAN executable",
+                filetypes=[("Executable", "*.exe"), ("All files", "*")],
+            )
+            if not path:
+                return
+            sr_binary = Path(path)
+        if not messagebox.askyesno(
+            "Rebuild print asset",
+            "Rebuild from original source? This creates a new PNG and invalidates "
+            "both platform approvals. Review output and rights before approval.",
+        ):
+            return
+        options = ProcessOptions(
+            remove_background=use_bg, rembg_binary=rembg_binary,
+            upscale=use_sr, esrgan_binary=sr_binary,
+        )
+        design_id = item["id"]
+        self.status.set("Image processor working in background...")
+
+        def worker() -> None:
+            try:
+                saved = process_stored_design(design_id, options)
+                self.events.put(("processed", saved))
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.events.put(("studio_error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def set_state(self, state: str) -> None:
         item = self.selected()
         if not item:
             return
         platform = self.selected_platform.get()
         if state == "approved":
-            try:
-                report = assess_design(item, platform)
-            except (OSError, ValueError) as exc:
-                messagebox.showerror("Preflight is required", str(exc))
+            if not item.get("rights_confirmed_at"):
+                if not messagebox.askyesno(
+                    "Commercial rights confirmation",
+                    "I confirm I own or hold commercial rights to the artwork, have checked "
+                    "trademarks, current marketplace rules and all listing metadata.",
+                ):
+                    return
+                confirm_rights(item["id"])
+            self.status.set("Running quality and publishing checks...")
+        else:
+            if item.get("platform_status", {}).get(platform) != "approved":
+                messagebox.showerror("Cannot upload", "Approve this design first.")
                 return
-            if report.issues and not messagebox.askyesno(
-                "Quality warnings",
-                "Print preflight found potential issues:\\n\\n"
-                + "\\n".join(report.issues)
-                + "\\n\\nHave you reviewed and explicitly accepted these risks?",
+            if not messagebox.askyesno(
+                "Manual upload confirmation",
+                "Have you personally uploaded this exact design and checked it in "
+                "your seller dashboard?",
             ):
                 return
-        if state == "uploaded" and not messagebox.askyesno(
-            "Manual confirmation", f"Did you PERSONALLY upload this design to {platform}?",
-        ):
-            return
-        update_state(item["id"], platform, state)
-        self.refresh_queue()
+        design_id = item["id"]
+
+        def worker() -> None:
+            try:
+                record = (
+                    approve_listing(design_id, platform) if state == "approved"
+                    else mark_uploaded(design_id, platform, confirmed=True)
+                )
+                self.events.put((state, record))
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.events.put(("studio_error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def open_upload(self) -> None:
+        item = self.selected()
+        if not item:
+            return
         platform = self.selected_platform.get()
+        if item.get("platform_status", {}).get(platform) != "approved":
+            messagebox.showerror(
+                "Approval required",
+                "Only an approved design may enter the manual upload workflow.",
+            )
+            return
         messagebox.showinfo(
             "Manual publishing only",
-            "This opens the platform in your browser. PODBot does not use unapproved "
-            "automation, submit uploads, handle CAPTCHA, or store login credentials.",
+            "First review the official platform rules. Upload your PNG manually, "
+            "verify product placement, art and SEO, then confirm Uploaded in PODBot. "
+            "No passwords, browser scripts, or CAPTCHA automation are used.",
         )
+        webbrowser.open(POLICY_URLS[platform])
         webbrowser.open(UPLOAD_PAGES[platform])
 
     def save_csv(self) -> None:

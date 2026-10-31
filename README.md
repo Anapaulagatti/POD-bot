@@ -1,4 +1,4 @@
-# PODBot Studio (MVP 0.2.0)
+# PODBot Studio (MVP 0.3.0)
 
 **Local-first Windows Print-On-Demand studio:** generate original AI design drafts, prepare transparent-canvas PNG files, create SEO metadata, review drafts for Redbubble and TeePublic, then upload manually. Written in Python, designed to become a single `PODBot.exe`.
 
@@ -72,3 +72,29 @@ See [Architecture](docs/ARCHITECTURE.md), [Source Review](docs/REFERENCE_REPOS.m
 - Desktop GUI adds a Trend Research tab, Preflight and T-shirt mockup buttons. User approval is still required for marketplace publishing.
 
 See [marketplace design requirements](docs/MARKETPLACE_REQUIREMENTS.md). These checks are advisory; the original AI resolution and actual visible artwork dimensions matter, and no resizing creates genuine high-resolution detail.
+
+## Professional print prep / supervised publishing (0.3)
+
+- **Process PNG**: preserve the original, crop to alpha bounds, 7% safe margin, 5000×5500 canvas and 300-DPI file metadata. Optional **external** `rembg` with `isnet-general-use` and `Real-ESRGAN-ncnn-vulkan` x4. Neither tool nor its model weights are bundled in `PODBot.exe`. Tool selection can execute a third-party program and, for rembg, download model weights after user confirmation. Check commercial weight licensing, installer integrity and GPU compatibility.
+- **QC**: hard fails for opaque rectangular artwork, edge-touching pixels, missing/inadequate canvas or TeePublic artwork footprint; warnings for coverage, palette and shirt contrast. Heuristics can reject genuine rectangular art and cannot guarantee print quality. Background remover is **optional**, not automatically available on a clean EXE install.
+- **Preview 4 colors**: white, dark, navy, gray. DHash fingerprint stored as duplicate-analysis groundwork. Editable local blocklist at `~/Documents/PODBot/blocklist.txt`. Empty by default and not an authoritative trademark index.
+- **Human publishing gate**: explicit commercial rights confirmation → QC pass → `approved` → approved-only CSV/manual upload → explicit `uploaded` confirmation. No unsupervised logins, browser injections, CAPTCHA automation, or official marketplace write API implementation.
+- Editing metadata/reprocessing resets prior approvals, and output is retained locally. Full audit and docs: [PUBLISHING_POLICY](docs/PUBLISHING_POLICY.md) and [PROJECT_ROADMAP](docs/PROJECT_ROADMAP.md).
+
+### Local tools
+
+The base EXE provides transparent crop/canvas, preflight and preview. For additional AI processing, separately install a **verified official** rembg CLI or Real-ESRGAN-ncnn-vulkan binary and explicitly choose its executable in **Publishing Queue → Process PNG**. Tool execution can consume RAM/VRAM and disk space. No cloud AI background removal is silently used. On Windows, the separate rembg tool might be the `rembg.exe` entrypoint produced by `pip install "rembg[cpu,cli]"` on a supported Python version. First use may download model weights. Verify the chosen model license before commercial production.
+
+### Controlled CLI
+
+```powershell
+podbot rights --id DESIGN_ID --confirm
+podbot process --id DESIGN_ID --rembg C:\\tools\\rembg.exe --esrgan C:\\tools\\realesrgan-ncnn-vulkan.exe
+podbot audit --id DESIGN_ID --platform teepublic
+podbot colors --id DESIGN_ID
+podbot approve --id DESIGN_ID --platform redbubble
+podbot export --platform redbubble --out approved.csv
+podbot uploaded --id DESIGN_ID --platform redbubble --confirm
+```
+
+**A successful Windows build is not a print proof or a signed/fully smoke-tested desktop release.**

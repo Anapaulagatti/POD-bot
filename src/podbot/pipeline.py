@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from podbot.audit import find_blocked_terms, fingerprint, get_blocklist
 from podbot.providers import ImageProvider
 from podbot.quality import assess_design
 from podbot.seo import SEOMetadata, gemini_seo, local_seo
@@ -49,6 +50,9 @@ def create_draft(
         raise ValueError("Please enter a descriptive prompt (minimum 5 characters).")
     if seo_mode not in {"local", "gemini"}:
         raise ValueError("Unknown SEO mode.")
+    blocked = find_blocked_terms(f"{prompt} {niche} {keywords}", get_blocklist())
+    if blocked:
+        raise ValueError("blocklist requires review: " + ", ".join(blocked[:5]))
     # Validate metadata and tokens before any costly image request.
     if seo_mode == "gemini":
         metadata = gemini_seo(niche, keywords, prompt, gemini_key)
@@ -78,6 +82,7 @@ def create_draft(
             "source_file": str(source_path.resolve()),
             "print_file": str(print_path.resolve()),
             "source_sha256": original_hash,
+            "fingerprint": fingerprint(image),
             "original_size": list(image.size),
             "output_size": list(PRINT_SIZE),
             "source_has_alpha": has_alpha,
@@ -87,6 +92,9 @@ def create_draft(
                 if not has_alpha else "Inspect edges and resolution before listing."
             ),
             "platform_status": {"redbubble": "draft", "teepublic": "draft"},
+            "rights_confirmed_at": None,
+            "ai_generated": True,
+            "processing": {"steps": ["resize-lanczos"], "native_source": list(image.size)},
         }
         record['preflight'] = {p: assess_design(record, p).to_dict() for p in ('redbubble', 'teepublic')}
         save_manifest(folder, record)
