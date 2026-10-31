@@ -125,9 +125,9 @@ def _call(url: str, body: dict | None, headers: dict[str, str],
     try:
         result = json.loads(raw)
         if not isinstance(result, dict):
-            raise ValueError("not an object")
+            raise TypeError("not an object")
         return result
-    except (ValueError, UnicodeError) as exc:
+    except (ValueError, TypeError, UnicodeError) as exc:
         raise RuntimeError("Provider returned malformed JSON.") from exc
 
 

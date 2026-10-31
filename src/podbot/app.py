@@ -22,9 +22,8 @@ from podbot.audit import (
 from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
-from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
 from podbot.processing import ProcessOptions, process_stored_design
-from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
+from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
 from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
 from podbot.settings import data_directory
 from podbot.storage import export_csv, list_designs, update_seo
@@ -306,16 +305,15 @@ class PODBotApp(tk.Tk):
             return
         spec = get_spec(model_id)
         mode = "gemini" if self.seo_choice.get() == "Gemini AI SEO" else "local"
-        if spec.paid or mode == "gemini":
-            if not messagebox.askyesno(
-                "Confirm paid API request",
-                "Selected model: " + spec.label + "\n\n" + spec.hint
-                + "\n\nGemini SEO: " + ("ON" if mode == "gemini" else "OFF")
-                + "\nThis may consume paid credits, potentially twice for image + SEO. "
-                  "Costs depend on provider settings and current pricing.\n"
-                  "Proceed with exactly ONE generation request, no paid fallback?",
-            ):
-                return
+        if (spec.paid or mode == "gemini") and not messagebox.askyesno(
+            "Confirm paid API request",
+            "Selected model: " + spec.label + "\n\n" + spec.hint
+            + "\n\nGemini SEO: " + ("ON" if mode == "gemini" else "OFF")
+            + "\nThis may consume paid credits, potentially twice for image + SEO. "
+              "Costs depend on provider settings and current pricing.\n"
+              "Proceed with exactly ONE generation request, no paid fallback?",
+        ):
+            return
         credentials = {
             "CLOUDFLARE_ACCOUNT_ID": self.account_id.get(),
             "CLOUDFLARE_API_TOKEN": self.cloudflare_token.get(),
