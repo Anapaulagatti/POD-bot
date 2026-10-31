@@ -115,6 +115,7 @@ class PODBotDesktop(ctk.CTk):
         self.model = tk.StringVar(value=CATALOG[0].label)
         self.seo = tk.StringVar(value="SEO offline (miễn phí)")
         self.resolution = tk.StringVar(value="2K")
+        self.flat_background_prompt = tk.BooleanVar(value=True)
         self.niche = tk.StringVar(value="minh họa thiên nhiên")
         self.keywords = tk.StringVar(value="mountain, nature, hiking")
         self.platform = tk.StringVar(value="redbubble")
@@ -179,7 +180,7 @@ class PODBotDesktop(ctk.CTk):
         brand = ctk.CTkFrame(sidebar, fg_color="transparent")
         brand.pack(fill="x", padx=22, pady=(28, 29))
         self._label(brand, "✦  PODBot", 25, bold=True).pack(anchor="w")
-        self._label(brand, "STUDIO  1.0 PREVIEW 2  •  VI", 11, fg=ACCENT, bold=True).pack(
+        self._label(brand, "STUDIO  1.0 PREVIEW 3  •  VI", 11, fg=ACCENT, bold=True).pack(
             anchor="w", pady=(3, 0),
         )
 
@@ -345,7 +346,7 @@ class PODBotDesktop(ctk.CTk):
         self.prompt_box.pack(fill="x", padx=20)
         self.prompt_box.insert(
             "1.0", "Original minimalist mountain sunrise illustration, crisp shapes, "
-            "centered composition for T-shirt print, no lettering, no logos, transparent background",
+            "centered composition for T-shirt print, no lettering, no logos",
         )
         fields = ctk.CTkFrame(form, fg_color="transparent")
         fields.pack(fill="x", padx=20, pady=(14, 6))
@@ -397,6 +398,12 @@ class PODBotDesktop(ctk.CTk):
             height=40, corner_radius=10, fg_color=CARD_ALT,
             button_color="#284C64", text_color=WHITE,
         ).pack(fill="x")
+        ctk.CTkCheckBox(
+            form, text="Thêm gợi ý nền trắng phẳng để dễ tách nền (bật/tắt)",
+            variable=self.flat_background_prompt, onvalue=True, offvalue=False,
+            fg_color=ACCENT, hover_color=ACCENT_HOVER,
+            text_color=WHITE, font=self._font(12),
+        ).pack(anchor="w", padx=20, pady=(12, 0))
         self.model_explanation = self._label(
             form, "", 11, fg=MUTED, wraplength=680, justify="left",
         )
@@ -606,10 +613,18 @@ class PODBotDesktop(ctk.CTk):
         ).pack(side="left", padx=(0, 8))
         self._button(row, "Lưu giới hạn ngày", self.save_api_cap, width=175).pack(side="left")
         self._label(
-            limits, "Mặc định 3 lượt / nhà cung cấp / ngày; 0 sẽ chặn mọi API tính phí. "
+            limits, "Tính theo ngày địa phương của Windows, không phải UTC. Mặc định 3 lượt / nhà cung cấp / ngày; 0 sẽ chặn mọi API tính phí. "
             "Tác vụ đã gửi không được hoàn lượt vì có thể đã bị tính tiền.",
             11, fg=WARNING, wraplength=720,
         ).pack(anchor="w", padx=20, pady=(0, 13))
+        if os.getenv("PODBOT_PAID_CALLS_PER_DAY") is not None:
+            self._label(
+                limits,
+                "⚠ Biến môi trường PODBOT_PAID_CALLS_PER_DAY = "
+                + os.getenv("PODBOT_PAID_CALLS_PER_DAY", "")
+                + " đang GHI ĐÈ hạn mức trong giao diện.",
+                11, fg=WARNING, wraplength=720,
+            ).pack(anchor="w", padx=20, pady=(0, 13))
         actions = ctk.CTkFrame(limits, fg_color="transparent")
         actions.pack(fill="x", padx=20, pady=(0, 19))
         for label, callback in (
@@ -854,7 +869,8 @@ class PODBotDesktop(ctk.CTk):
             return
         key = self.keys["GEMINI_API_KEY"].get()
         self._run("Đang tạo hình ảnh và dữ liệu SEO...", create_draft,
-                  prompt, niche, keywords, provider, seo_mode, key)
+                  prompt, niche, keywords, provider, seo_mode, key,
+                  flat_background_prompt=self.flat_background_prompt.get())
 
     def import_file(self) -> None:
         path = filedialog.askopenfilename(
@@ -1005,49 +1021,58 @@ class PODBotDesktop(ctk.CTk):
     def process_image(self) -> None:
         if not (entry := self._selected()):
             return
-        available = background_module_available()
-        remove = messagebox.askyesno(
-            "Xóa nền AI tùy chọn",
-            "Đã cài rembg trong Python: " + ("Có" if available else "Chưa") + ".\n"
-            "Xóa nền có thể tải trọng số model khi sử dụng lần đầu (cần Internet).\n"
-            "Chọn Có để tách nền, hoặc Không để giữ nguyên nền.",
+        flat = messagebox.askyesno(
+            "Tách nền phẳng bằng Pillow, có sẵn trong EXE",
+            "Ảnh có nền trắng/màu phẳng gần đồng nhất?\n"
+            "Có = dùng flood-fill từ các mép, không cần API/ML.\n"
+            "Không = chọn rembg (nếu có) hoặc giữ nguyên nền.\n"
+            "Lưu ý: kiểm tra kỹ chữ trắng, nét mảnh và quầng viền sau tách.",
         )
-        rembg = None
-        if remove and not available:
-            use_binary = messagebox.askyesno(
-                "Chưa cài rembg tích hợp",
-                "Để dùng rembg trực tiếp: pip install -e \".[bg]\" khi chạy từ mã nguồn. "
-                "Bản EXE tiêu chuẩn không tự cài thêm package. "
-                "Bạn có rembg.exe đã cài riêng muốn chọn ngay không?",
+        remove, rembg = False, None
+        if not flat:
+            available = background_module_available()
+            remove = messagebox.askyesno(
+                "Tách nền AI rembg tùy chọn",
+                "rembg Python đã cài: " + ("Có" if available else "Chưa") + ".\n"
+                "Có = dùng rembg (có thể tải model lần đầu). "
+                "Không = chỉ chuẩn hóa/căn lề file in.",
             )
-            if not use_binary:
-                return
-            file = filedialog.askopenfilename(title="Chọn rembg.exe đã cài riêng")
-            if not file:
-                return
-            rembg = Path(file)
+            if remove and not available:
+                if not messagebox.askyesno(
+                    "Chưa có rembg trong EXE",
+                    "Bạn có rembg.exe cài riêng? Chọn Có để duyệt file. "
+                    "Nếu chạy mã nguồn có thể pip install -e \".[bg]\".",
+                ):
+                    return
+                chosen = filedialog.askopenfilename(title="Chọn rembg.exe đã cài riêng")
+                if not chosen:
+                    return
+                rembg = Path(chosen)
         upscale = messagebox.askyesno(
             "Phóng to bằng Real-ESRGAN",
             "Bạn muốn sử dụng Real-ESRGAN đã cài riêng? "
-            "Chọn Không để dùng phép nội suy Lanczos.",
+            "Chọn Không để dùng Lanczos.",
         )
         esrgan = None
         if upscale:
-            file = filedialog.askopenfilename(title="Chọn Real-ESRGAN executable")
-            if not file:
+            chosen = filedialog.askopenfilename(title="Chọn Real-ESRGAN executable")
+            if not chosen:
                 return
-            esrgan = Path(file)
+            esrgan = Path(chosen)
         if not messagebox.askyesno(
-            "Tạo lại file in", "Xử lý từ ảnh gốc sẽ tạo file mới "
-            "và hủy trạng thái đã duyệt. Tiếp tục?",
+            "Tạo lại file in",
+            "Sẽ lưu một file mới và hủy phê duyệt đăng bán trước đó. "
+            "Sau khi xử lý, bạn cần kiểm tra file PNG và mockup. Tiếp tục?",
         ):
             return
         options = ProcessOptions(
-            remove_background=remove, rembg_binary=rembg,
-            upscale=upscale, esrgan_binary=esrgan,
+            flat_background=flat, remove_background=remove,
+            rembg_binary=rembg, upscale=upscale, esrgan_binary=esrgan,
         )
-        self._run("Đang xử lý lại ảnh gốc...",
-                  process_stored_design, entry["id"], options)
+        self._run(
+            "Đang cắt nền / tạo lại file in...",
+            process_stored_design, entry["id"], options,
+        )
 
     def approve(self) -> None:
         if not (entry := self._selected()):
