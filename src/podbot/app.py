@@ -383,6 +383,9 @@ class PODBotApp(tk.Tk):
             f"{check.level.upper()} | {check.name}: {check.value} | {check.message}"
             for check in checks
         )
+        matched = near_duplicates(item, list(self.records.values()))
+        if matched:
+            summary += "\nWARN | Similar local design IDs: " + ", ".join(matched[:5])
         messagebox.showinfo(
             f"Print / QC: {platform}",
             summary + "\\n\\nEvery FAIL blocks approval. Warnings require human review.",
