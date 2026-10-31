@@ -2,10 +2,8 @@
 
 import base64
 import io
-import json
-import urllib.error
 from pathlib import Path
-
+import urllib.error
 import pytest
 from PIL import Image
 
@@ -191,3 +189,25 @@ def test_model_catalog_does_not_include_retired_image_endpoints():
         assert not any(old in spec.model for old in (
             "dall-e-", "gpt-image-1", "-preview",
         ))
+
+
+
+def test_local_import_does_not_call_image_api(tmp_path, monkeypatch):
+    from podbot.importer import import_design
+    monkeypatch.setenv("PODBOT_DATA_DIR", str(tmp_path))
+    source = tmp_path / "my-art.png"
+    Image.new("RGBA", (90, 100), (0, 90, 170, 240)).save(source)
+    entry = import_design(source, "original abstract", "blue, nature", root=tmp_path / "designs")
+    assert entry["ai_generated"] is False
+    assert entry["model_id"] == "local-import"
+    assert entry["platform_status"]["redbubble"] == "draft"
+    assert Path(entry["source_file"]).is_file()
+
+
+def test_bad_local_file_rejected_before_creating_design(tmp_path):
+    from podbot.importer import import_design
+    fake = tmp_path / "malware.exe"
+    fake.write_bytes(b"not an image")
+    with pytest.raises(ValueError, match="Only PNG"):
+        import_design(fake, "flowers", root=tmp_path / "designs")
+    assert not (tmp_path / "designs").exists()

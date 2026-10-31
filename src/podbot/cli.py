@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 from podbot.audit import audit_image, make_color_preview
+from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.provider_catalog import CATALOG, MODELS, get_spec, make_provider
@@ -31,6 +32,10 @@ def main() -> None:
                         help="Authorize one potentially billed image generation")
     create.add_argument("--gemini-size", choices=["1K", "2K", "4K"], default="2K")
     create.add_argument("--seo", choices=["local", "gemini"], default="local")
+    import_cmd = commands.add_parser("import", help="Import a local design without image API")
+    import_cmd.add_argument("--file", type=Path, required=True)
+    import_cmd.add_argument("--niche", required=True)
+    import_cmd.add_argument("--keywords", default="")
     commands.add_parser("models", help="List image providers; no credentials exposed")
     commands.add_parser("list", help="Display saved draft status")
     csv = commands.add_parser("export", help="Generate manual-upload CSV")
@@ -80,6 +85,9 @@ def main() -> None:
             args.prompt, args.niche, args.keywords, provider, seo_mode=args.seo
         )
         print(json.dumps(record, indent=2, ensure_ascii=False))
+    elif args.command == "import":
+        result = import_design(args.file, args.niche, args.keywords)
+        print(json.dumps({"id": result["id"], "path": result["print_file"]}))
     elif args.command == "models":
         for spec in CATALOG:
             print(f"{spec.id}: {spec.label} [{spec.env_key}] — {spec.hint}")

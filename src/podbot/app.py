@@ -19,6 +19,7 @@ from podbot.audit import (
     make_color_preview,
     near_duplicates,
 )
+from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
@@ -121,6 +122,9 @@ class PODBotApp(tk.Tk):
         ).pack(anchor="w")
         self.generate_button = ttk.Button(tab, text="Generate design + draft SEO", command=self.generate)
         self.generate_button.pack(anchor="w", pady=(15, 10))
+        ttk.Button(
+            tab, text="Import my PNG/JPEG/WebP (no AI fee)", command=self.import_local,
+        ).pack(anchor="w", pady=(2, 10))
         ttk.Label(
             tab,
             text=("Creates one design per click. The print canvas is 5000 x 5500 px. "
@@ -266,6 +270,25 @@ class PODBotApp(tk.Tk):
         ttk.Label(tab, text="No account passwords, browser sessions or cookies are collected.").pack(
             anchor="w", pady=16
         )
+
+    def import_local(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Choose your own design (no image API request)",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")],
+        )
+        if not path:
+            return
+        niche, keywords = self.niche.get(), self.keywords.get()
+        self.status.set("Importing local artwork, no image API charges...")
+
+        def worker() -> None:
+            try:
+                saved = import_design(Path(path), niche, keywords)
+                self.events.put(("success", saved))
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.events.put(("error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def generate(self) -> None:
         prompt = self.prompt_widget.get("1.0", "end").strip()
