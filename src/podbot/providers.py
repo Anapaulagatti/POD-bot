@@ -13,6 +13,8 @@ from typing import Protocol
 
 from PIL import Image
 
+from podbot.http_utils import CLOUDFLARE_JSON_LIMIT, read_limited_json
+
 
 class ImageProvider(Protocol):
     name: str
@@ -53,7 +55,7 @@ class CloudflareFluxProvider:
         )
         try:
             with urllib.request.urlopen(request, timeout=120) as response:
-                result = json.load(response)
+                result = read_limited_json(response, CLOUDFLARE_JSON_LIMIT)
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"Cloudflare API returned HTTP {exc.code}.") from exc
         if result.get("success") is False:
@@ -62,6 +64,8 @@ class CloudflareFluxProvider:
         if not encoded:
             raise RuntimeError("Cloudflare returned no image.")
         try:
+            if len(encoded) > CLOUDFLARE_JSON_LIMIT:
+                raise RuntimeError("Cloudflare encoded image exceeds limit.")
             binary = base64.b64decode(encoded, validate=True)
             image = Image.open(io.BytesIO(binary))
             image.load()

@@ -118,7 +118,7 @@ def test_seo_changes_are_persisted_and_validate_fields(tmp_path):
         name = "fake"
 
         def generate(self, prompt):
-            return Image.new("RGBA", (50, 50), (200, 200, 20, 0))
+            return Image.new("RGBA", (50, 50), (200, 200, 20, 255))
 
     entry = create_draft("an original botanical illustration", "plants", "garden", Provider(), root=tmp_path)
     new = update_seo(

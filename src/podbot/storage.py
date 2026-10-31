@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -48,7 +49,7 @@ def update_state(design_id: str, platform: str, state: str, root: Path | None = 
         raise ValueError("Unknown platform.")
     if state not in ALLOWED_STATES:
         raise ValueError("Unknown review state.")
-    if not __import__("re").fullmatch(r"[0-9a-f]{32}", design_id):
+    if not re.fullmatch(r"[0-9a-f]{32}", design_id):
         raise ValueError("Invalid design ID.")
     if state == "approved":
         from podbot.publishing import approve_listing
@@ -81,8 +82,6 @@ def update_seo(
     root: Path | None = None,
 ) -> dict:
     """Apply explicitly reviewed SEO edits to the stored local manifest."""
-    import re
-
     if not re.fullmatch(r"[0-9a-f]{32}", design_id):
         raise ValueError("Invalid design ID.")
     metadata = normalize_metadata(title, description, tags)

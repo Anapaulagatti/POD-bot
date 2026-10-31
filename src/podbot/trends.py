@@ -61,7 +61,7 @@ def read_trends(country: str = "US", limit: int = 10) -> list[Trend]:
     """Fetch public RSS on demand; never crawl or retry on rate limits."""
     url = trend_url(country)
     request = urllib.request.Request(url, headers={
-        "User-Agent": "PODBotStudio/0.2 (+https://github.com/Anapaulagatti/POD-bot)",
+        "User-Agent": "PODBotStudio/1.0-preview.1 (+https://github.com/Anapaulagatti/POD-bot)",
         "Accept": "application/rss+xml, application/xml",
     })
     try:

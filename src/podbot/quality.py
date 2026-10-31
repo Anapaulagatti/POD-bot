@@ -1,4 +1,7 @@
-"""Conservative print-preflight checks against marketplace sizing guidance."""
+"""Compatibility facade around the single authoritative audit.py QC engine.
+
+Do not store platform thresholds or maintain independent pass/fail checks here.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +10,9 @@ from pathlib import Path
 
 from PIL import Image
 
-# See docs/MARKETPLACE_REQUIREMENTS.md. These are indicative upload guides,
-# not a promise that a design qualifies for all products.
-PROFILE_SIZES = {
-    "redbubble": (2400, 3200),
-    "teepublic": (5000, 5500),
-}
+from podbot.audit import MIN_CANVAS, audit_image
+
+PROFILE_SIZES = MIN_CANVAS  # Deprecated alias; one shared source of truth.
 
 
 @dataclass(frozen=True)
@@ -34,46 +34,33 @@ def assess_image(
     platform: str = "teepublic",
     opaque_source: bool | None = None,
 ) -> QualityReport:
-    """Inspect actual pixels, not EXIF DPI or reported file resolution."""
-    if platform not in PROFILE_SIZES:
-        raise ValueError("Unsupported marketplace.")
-    if image.width == 0 or image.height == 0:
-        raise ValueError("Empty image.")
-    required = PROFILE_SIZES[platform]
+    """Backwards compatible report projected only from audit_image results."""
+    checks = audit_image(
+        image, platform, source_size=source_size, opaque_source=bool(opaque_source)
+    )
     alpha = image.convert("RGBA").getchannel("A")
-    extrema = alpha.getextrema()
-    transparent = extrema[0] < 255
     box = alpha.getbbox()
     art_size = (box[2] - box[0], box[3] - box[1]) if box else (0, 0)
-    issues: list[str] = []
-    if image.width < required[0] or image.height < required[1]:
-        if platform == "teepublic":
-            issues.append("TeePublic all-product canvas requires 5000 x 5500 pixels.")
-        else:
-            issues.append("Redbubble apparel commonly requires 2400 x 3200 pixels.")
-    if art_size == (0, 0):
-        issues.append("No non-transparent artwork detected.")
-    if platform == "teepublic" and (art_size[0] < 1500 or art_size[1] < 1995):
-        issues.append("TeePublic artwork footprint is below 1500 x 1995 pixels.")
-    if not transparent or opaque_source:
-        issues.append("Opaque background/source detected; confirm suitability for apparel.")
-    if source_size and (art_size[0] > source_size[0] * 1.5 or art_size[1] > source_size[1] * 1.5):
-        issues.append(
-            "Artwork was upscaled from the native AI source. Upscaling does not restore "
-            "fine print detail; review at full size."
-        )
-    return QualityReport(platform, image.size, art_size, transparent, tuple(issues), not issues)
+    return QualityReport(
+        platform=platform,
+        canvas_size=image.size,
+        artwork_size=art_size,
+        has_transparency=alpha.getextrema()[0] < 255,
+        issues=tuple(
+            f"{check.name}: {check.message} ({check.value})"
+            for check in checks if check.level != "pass"
+        ),
+        ready=all(check.level != "fail" for check in checks),
+    )
 
 
 def assess_design(record: dict, platform: str) -> QualityReport:
-    image_path = Path(record["print_file"])
-    if not image_path.exists():
-        raise FileNotFoundError(f"Missing local print asset: {image_path}")
+    path = Path(record["print_file"])
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing local print asset: {path}")
     native = tuple(record.get("original_size", (0, 0)))
-    with Image.open(image_path) as image:
+    with Image.open(path) as image:
         return assess_image(
-            image,
-            source_size=native,
-            platform=platform,
+            image, source_size=native, platform=platform,
             opaque_source=not record.get("source_has_alpha", False),
         )

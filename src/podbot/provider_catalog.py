@@ -206,11 +206,19 @@ class OpenAIImage:
             raise ValueError("OpenAI API key is required.")
         if self.model not in {"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}:
             raise ValueError("Unsupported OpenAI image model.")
-        result = _call("https://api.openai.com/v1/images/generations", {
-            "model": self.model, "prompt": prompt, "n": 1,
-            "size": "1024x1536", "quality": "high",
-            "background": "transparent", "output_format": "png",
-        }, {"Authorization": f"Bearer {self.key}"})
+        try:
+            result = _call("https://api.openai.com/v1/images/generations", {
+                "model": self.model, "prompt": prompt, "n": 1,
+                "size": "1024x1536", "quality": "high",
+                "background": "transparent", "output_format": "png",
+            }, {"Authorization": f"Bearer {self.key}"})
+        except RuntimeError as exc:
+            if "HTTP 400" in str(exc):
+                raise RuntimeError(
+                    "OpenAI HTTP 400: check model access and supported image parameters "
+                    "(including transparent PNG). No automatic paid retry was made."
+                ) from exc
+            raise
         images = result.get("data") or []
         if not images or "b64_json" not in images[0]:
             raise RuntimeError("OpenAI did not return image bytes.")

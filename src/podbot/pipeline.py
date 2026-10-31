@@ -8,11 +8,11 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image
 
-from podbot.audit import find_blocked_terms, fingerprint, get_blocklist
+from podbot.audit import audit_image, find_blocked_terms, fingerprint, get_blocklist
+from podbot.processing import compose_print
 from podbot.providers import ImageProvider
-from podbot.quality import assess_design
 from podbot.seo import SEOMetadata, gemini_seo, local_seo
 from podbot.settings import designs_directory
 from podbot.storage import save_manifest
@@ -20,20 +20,14 @@ from podbot.storage import save_manifest
 PRINT_SIZE = (5000, 5500)
 
 
-def prepare_print_image(image: Image.Image, target: Path, size: tuple[int, int] = PRINT_SIZE) -> bool:
-    """Upscale/fit to transparent canvas; keep alpha if present, never fake cutout quality.
-
-    Note: Resizing does not add detail, and an opaque AI image remains opaque.
-    """
-    if image.width < 1 or image.height < 1:
-        raise ValueError("Invalid image dimensions.")
+def prepare_print_image(
+    image: Image.Image, target: Path, size: tuple[int, int] = PRINT_SIZE
+) -> bool:
+    """Compatibility helper: shared alpha-cropped, 7% margin print engine."""
     has_alpha = image.convert("RGBA").getchannel("A").getextrema()[0] < 255
-    rgba = image.convert("RGBA")
-    fitted = ImageOps.contain(rgba, (int(size[0] * .9), int(size[1] * .9)), Image.Resampling.LANCZOS)
-    canvas = Image.new("RGBA", size, (0, 0, 0, 0))
-    canvas.alpha_composite(fitted, ((size[0] - fitted.width) // 2, (size[1] - fitted.height) // 2))
-    canvas.save(target, format="PNG", optimize=True, dpi=(300, 300))
+    compose_print(image, target, size=size)
     return has_alpha
+
 
 
 def create_draft(
@@ -68,7 +62,8 @@ def create_draft(
     print_path = folder / "print_5000x5500.png"
     try:
         image.save(source_path, format="PNG")
-        has_alpha = prepare_print_image(image, print_path)
+        has_alpha = image.convert("RGBA").getchannel("A").getextrema()[0] < 255
+        print_details = compose_print(image, print_path, size=PRINT_SIZE)
         original_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
         record = {
             "id": design_id,
@@ -83,6 +78,7 @@ def create_draft(
             "print_file": str(print_path.resolve()),
             "source_sha256": original_hash,
             "fingerprint": fingerprint(image),
+            "fingerprint_algorithm": "v2:luminance-gray+alpha",
             "original_size": list(image.size),
             "output_size": list(PRINT_SIZE),
             "source_has_alpha": has_alpha,
@@ -94,9 +90,14 @@ def create_draft(
             "platform_status": {"redbubble": "draft", "teepublic": "draft"},
             "rights_confirmed_at": None,
             "ai_generated": True,
-            "processing": {"steps": ["resize-lanczos"], "native_source": list(image.size)},
+            "processing": {**print_details, "steps": ["alpha-crop", "safe-margin", "lanczos"]},
         }
-        record['preflight'] = {p: assess_design(record, p).to_dict() for p in ('redbubble', 'teepublic')}
+        with Image.open(print_path) as printed:
+            record["quality_checks"] = {
+                platform: [check.to_dict() for check in audit_image(
+                    printed, platform, source_size=image.size, opaque_source=not has_alpha
+                )] for platform in ("redbubble", "teepublic")
+            }
         save_manifest(folder, record)
         return record
     except Exception:

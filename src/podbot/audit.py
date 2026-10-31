@@ -52,13 +52,8 @@ def get_blocklist(path: Path | None = None) -> list[str]:
     ][:3000]
 
 
-def fingerprint(image: Image.Image) -> str:
-    """Portable difference hash of an opaque preview, for advisory near-duplicate checks."""
-    rgba = image.convert("RGBA")
-    preview = Image.new("RGBA", rgba.size, "white")
-    preview.alpha_composite(rgba)
-    small = preview.convert("L").resize((9, 8), Image.Resampling.LANCZOS)
-    pixels = list(small.tobytes())
+def _dhash(image: Image.Image) -> str:
+    pixels = list(image.convert("L").resize((9, 8), Image.Resampling.LANCZOS).tobytes())
     result = 0
     for y in range(8):
         for x in range(8):
@@ -66,11 +61,32 @@ def fingerprint(image: Image.Image) -> str:
     return f"{result:016x}"
 
 
+def fingerprint(image: Image.Image) -> str:
+    """Versioned dHash: gray-composited luminance PLUS the original alpha mask.
+
+    White motifs cannot disappear into a white-only background. The alpha signature
+    is also effective for transparent lettering and different outline shapes.
+    """
+    rgba = image.convert("RGBA")
+    preview = Image.new("RGBA", rgba.size, (127, 127, 127, 255))
+    preview.alpha_composite(rgba)
+    return "v2:" + _dhash(preview.convert("RGB")) + _dhash(rgba.getchannel("A"))
+
+
 def hash_distance(a: str, b: str) -> int:
-    return (int(a, 16) ^ int(b, 16)).bit_count()
+    if not (a.startswith("v2:") and b.startswith("v2:") and
+            re.fullmatch(r"v2:[0-9a-f]{32}", a) and
+            re.fullmatch(r"v2:[0-9a-f]{32}", b)):
+        raise ValueError("Only version 2 fingerprints can be compared.")
+    return (int(a[3:19], 16) ^ int(b[3:19], 16)).bit_count() + (
+        int(a[19:], 16) ^ int(b[19:], 16)
+    ).bit_count()
 
 
-def audit_image(image: Image.Image, platform: str) -> list[Check]:
+
+def audit_image(image: Image.Image, platform: str, *,
+                source_size: tuple[int, int] | None = None,
+                opaque_source: bool = False) -> list[Check]:
     if platform not in MIN_CANVAS:
         raise ValueError("Unsupported marketplace.")
     if image.width <= 0 or image.height <= 0:
@@ -115,6 +131,18 @@ def audit_image(image: Image.Image, platform: str) -> list[Check]:
         ok = aw >= 1500 and ah >= 1995
         output.append(Check("visible_area", "pass" if ok else "fail", f"{aw}x{ah}",
                             "TeePublic requests >=1500x1995 visible artwork pixels."))
+    if source_size and min(source_size) > 0:
+        scale = max(image.width / source_size[0], image.height / source_size[1])
+        output.append(Check(
+            "native_resolution", "warn" if scale > 1.5 else "pass",
+            f"{source_size[0]}x{source_size[1]} native, {scale:.1f}x",
+            "Artwork upscaled from native source; interpolation cannot restore original detail.",
+        ))
+    if opaque_source:
+        output.append(Check(
+            "source_background", "warn", "original image was opaque",
+            "Check the original source and background removal quality.",
+        ))
     # Counts and contrast are advisory only; thresholds are user-calibratable later.
     core = small.convert("RGB").quantize(colors=16)
     colors = sum(1 for count in core.histogram() if count)
@@ -154,12 +182,13 @@ def near_duplicates(
 ) -> list[str]:
     """Advisory local dHash overlap; no external similarity server."""
     current = entry.get("fingerprint")
-    if not isinstance(current, str) or not re.fullmatch(r"[0-9a-f]{16}", current):
+    if not isinstance(current, str) or not re.fullmatch(r"v2:[0-9a-f]{32}", current):
         return []
     matches = []
     for other in other_entries:
         candidate = other.get("fingerprint")
-        if other.get("id") != entry.get("id") and isinstance(candidate, str):
+        if (other.get("id") != entry.get("id") and isinstance(candidate, str)
+                and re.fullmatch(r"v2:[0-9a-f]{32}", candidate)):
             try:
                 if hash_distance(current, candidate) < max_distance:
                     matches.append(str(other.get("id")))

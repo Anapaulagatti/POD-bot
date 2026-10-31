@@ -1,28 +1,26 @@
-# Architecture & safety design
+# Kiến trúc hiện hành · PODBot Studio 1.0 Preview
 
-## Pipeline
+```text
+CustomTkinter GUI tiếng Việt (modern_app.py) / CLI
+  ├─ provider_catalog.py  →  Cloudflare, Hugging Face, Gemini, OpenAI, Replicate, fal.ai, Stability
+  ├─ importer.py          →  Nhập file PNG/JPEG/WebP không gọi API ảnh
+  ├─ seo.py               →  SEO offline hoặc Gemini (JSON giới hạn 2MB)
+  ├─ providers.py         →  Cloudflare API (JSON giới hạn 32MB), Hugging Face
+  ├─ http_utils.py        →  đọc JSON giới hạn kích thước, không echo dữ liệu nhạy cảm
+  ├─ pipeline.py          →  ảnh gốc + compose_print + fingerprint v2 + manifest JSON
+  ├─ processing.py        →  compose_print chung, rembg Python/công cụ ngoài, Real-ESRGAN ngoài
+  ├─ audit.py             →  CHÍNH SÁCH QC DUY NHẤT + fingerprint gray/alpha
+  ├─ quality.py           →  adapter tương thích các bản cũ, không có ngưỡng riêng
+  ├─ publishing.py        →  quyền thương mại + QC + approved + CSV + manual uploaded
+  └─ storage.py           →  ghi manifest atomic, sửa SEO/ảnh sẽ reset duyệt cũ
+```
 
-`Tkinter GUI / CLI -> ImageProvider -> source.png -> print canvas -> metadata -> JSON manifest -> publishing review queue -> CSV/manual marketplace upload`.
+- Mọi file in mới và được xử lý lại sử dụng cùng `compose_print`: crop alpha, lề 7%, PNG 5000×5500. Việc resize không tạo thêm chi tiết bản in.
+- Fingerprint `v2:` sử dụng dHash nền xám kèm alpha. Hash 16 ký tự cũ (v1) không so với v2, cũng không được dùng để khẳng định trùng. Có thể reprocess để tái tính hash trên thiết kế cũ.
+- `audit_image` là nguồn duy nhất của bảng kích thước canvas và các check. `quality.py` giữ API cũ nhưng chỉ chuyển đổi kết quả audit.
+- RemBg `.[bg]` có thể tự tải weights khi người dùng chủ động chọn tách nền. EXE thông thường không nhúng weights/các thư viện nặng.
+- Không lưu key API vào source/manifest và không tự thanh toán/fallback/retry. Không tự động đăng sàn hoặc vượt CAPTCHA.
+- Không có OCR, SQLite queue, keyring, ngân sách theo provider, installer, code-signing hoặc lockfile đầy đủ. `--onefile --windowed` có thể bị antivirus chặn; bản production tương lai nên hỗ trợ `--onedir`.
+- CI trên Windows chạy pytest, Ruff, PyInstaller và smoke-check tồn tại EXE; chưa kiểm tra GUI thủ công ở mọi DPI.
 
-- `providers.py`: Cloudflare FLUX.1-schnell REST and optional Hugging Face Inference Client. Fail closed; never silently switch to a paid model/provider. Provider network calls in GUI worker thread.
-- `seo.py`: deterministic local SEO, optional opt-in Gemini API metadata; labels it a draft, not evidence of verified keyword traffic.
-- `pipeline.py`: image creation, alpha detection, print-canvas export and content hash. Canvas upscaling alone does not improve physical print fidelity.
-- `storage.py`: local manifests with atomic replace and explicit per-marketplace review states.
-- `app.py`: desktop UI with no user account credentials; external upload pages are explicitly user-operated.
-- `cli.py`: automation-ready one-design-at-a-time CLI and CSV export.
-
-## Important missing capabilities
-
-- Real background separation/masking, color management, DPI/print-quality validation and print-area variations per marketplace product.
-- Live, correctly sourced trend signals; providers may require authentication and licensing.
-- Production-grade platform integrations or authorized uploader automation. Check current terms, limits and UI behavior before implementing. Never bypass CAPTCHA, anti-bot detection, rate limits or access controls.
-- Secure OS credential vault, encrypted backups, job cancellation, quotas, model progress and resumable failed requests.
-- GPU-model weights and local ComfyUI server are **not bundled** into the EXE.
-
-## Release integrity
-
-Windows CI runs on clean GitHub-hosted Windows runner. PyInstaller produces a one-file .exe; it's an executable packaging tool, not an installer or code-signing certificate. Never distribute an unsigned, unscanned EXE as a verified production binary.
-
-## Release 0.3
-
-See [PUBLISHING_POLICY.md](PUBLISHING_POLICY.md). Optional external rembg and Real-ESRGAN, output provenance, QC failures that prevent approval, human ownership confirmation, approved-only CSV and manual upload confirmation. No marketplace passwords, CAPTCHA bypass or unattended publishing.
+Xem [README](../README.md) và [chính sách xuất bản](PUBLISHING_POLICY.md).

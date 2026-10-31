@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0rc1 (31/10/2026) · Preview 1
+- Khắc phục white-on-transparent duplicate hash bằng fingerprint v2, giữ lại manifest cũ.
+- Hợp nhất QC vào audit.py, quality.py chỉ là lớp tương thích.
+- Chuẩn hóa pipeline mới và xử lý lại ảnh bằng compose_print.
+- Hỗ trợ rembg Python extra opt-in, giới hạn JSON Cloudflare/Gemini.
+- Cải thiện lỗi OpenAI HTTP 400, chuyển README và kiến trúc về tiếng Việt.
+
+**Lịch sử bên dưới giữ nguyên tên 4.x của các bản thử nghiệm trước khi chuyển sang cách đặt phiên bản preview.**
+
 ## 4.1.0 (2026-10-31 · Vietnamese desktop UI)
 - Thay giao diện desktop mặc định bằng CustomTkinter MIT, tông xanh than/xanh ngọc và thanh điều hướng trái.
 - 5 màn hình tiếng Việt: Tổng quan, Sáng tạo AI, Thư viện thiết kế, Xu hướng, Cài đặt API.

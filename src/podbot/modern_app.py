@@ -21,7 +21,11 @@ from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_co
 from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
-from podbot.processing import ProcessOptions, process_stored_design
+from podbot.processing import (
+    ProcessOptions,
+    background_module_available,
+    process_stored_design,
+)
 from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
 from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
 from podbot.settings import data_directory
@@ -168,7 +172,7 @@ class PODBotDesktop(ctk.CTk):
         brand = ctk.CTkFrame(sidebar, fg_color="transparent")
         brand.pack(fill="x", padx=22, pady=(28, 29))
         self._label(brand, "✦  PODBot", 25, bold=True).pack(anchor="w")
-        self._label(brand, "STUDIO  4.1  •  VI", 11, fg=ACCENT, bold=True).pack(
+        self._label(brand, "STUDIO  1.0 PREVIEW  •  VI", 11, fg=ACCENT, bold=True).pack(
             anchor="w", pady=(3, 0),
         )
 
@@ -910,14 +914,24 @@ class PODBotDesktop(ctk.CTk):
     def process_image(self) -> None:
         if not (entry := self._selected()):
             return
+        available = background_module_available()
         remove = messagebox.askyesno(
-            "Xóa nền tùy chọn",
-            "Bạn đã cài rembg và muốn sử dụng? Công cụ bên ngoài có thể tải model "
-            "lần đầu tiên. Chọn Không để chỉ cắt và căn lề bằng Pillow.",
+            "Xóa nền AI tùy chọn",
+            "Đã cài rembg trong Python: " + ("Có" if available else "Chưa") + ".\n"
+            "Xóa nền có thể tải trọng số model khi sử dụng lần đầu (cần Internet).\n"
+            "Chọn Có để tách nền, hoặc Không để giữ nguyên nền.",
         )
         rembg = None
-        if remove:
-            file = filedialog.askopenfilename(title="Chọn file rembg.exe")
+        if remove and not available:
+            use_binary = messagebox.askyesno(
+                "Chưa cài rembg tích hợp",
+                "Để dùng rembg trực tiếp: pip install -e \".[bg]\" khi chạy từ mã nguồn. "
+                "Bản EXE tiêu chuẩn không tự cài thêm package. "
+                "Bạn có rembg.exe đã cài riêng muốn chọn ngay không?",
+            )
+            if not use_binary:
+                return
+            file = filedialog.askopenfilename(title="Chọn rembg.exe đã cài riêng")
             if not file:
                 return
             rembg = Path(file)
