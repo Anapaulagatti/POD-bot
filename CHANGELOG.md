@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0rc2 · 1.0 Preview 2
+- SQLite bảo vệ lượt gọi API có thể tính phí theo provider, mặc định 3 lần/ngày; không cam kết giới hạn USD.
+- Windows Credential Manager qua keyring, chỉ lưu/khôi phục/xóa API key khi người dùng chủ động chọn.
+- Ghi nhận lượt trước HTTP để tránh tự retry sau lỗi mạng.
+
 ## 1.0.0rc1 (31/10/2026) · Preview 1
 - Khắc phục white-on-transparent duplicate hash bằng fingerprint v2, giữ lại manifest cũ.
 - Hợp nhất QC vào audit.py, quality.py chỉ là lớp tương thích.

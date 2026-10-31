@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
 
+from podbot.api_limits import reserve_paid_request
 from podbot.http_utils import read_limited_json
 
 
@@ -86,6 +87,7 @@ def gemini_seo(niche: str, keywords: str, prompt: str, api_key: str = "") -> SEO
         headers={"x-goog-api-key": key, "Content-Type": "application/json"},
         method="POST",
     )
+    reserve_paid_request("gemini")
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
             result = read_limited_json(response)

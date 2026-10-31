@@ -17,7 +17,9 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from PIL import Image
 
+from podbot.api_limits import get_daily_limit, set_daily_limit
 from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
+from podbot.credential_vault import erase_credentials, remember_credentials, restore_credentials
 from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
@@ -130,6 +132,11 @@ class PODBotDesktop(ctk.CTk):
                 "STABILITY_API_KEY",
             )
         }
+        try:
+            cap = get_daily_limit()
+        except (ValueError, RuntimeError):
+            cap = 0  # Malformed config must default to no paid calls.
+        self.paid_calls_cap = tk.StringVar(value=str(cap))
         self.message = tk.StringVar(value=TEXT["ready"])
         self._layout()
         self.refresh()
@@ -172,7 +179,7 @@ class PODBotDesktop(ctk.CTk):
         brand = ctk.CTkFrame(sidebar, fg_color="transparent")
         brand.pack(fill="x", padx=22, pady=(28, 29))
         self._label(brand, "✦  PODBot", 25, bold=True).pack(anchor="w")
-        self._label(brand, "STUDIO  1.0 PREVIEW  •  VI", 11, fg=ACCENT, bold=True).pack(
+        self._label(brand, "STUDIO  1.0 PREVIEW 2  •  VI", 11, fg=ACCENT, bold=True).pack(
             anchor="w", pady=(3, 0),
         )
 
@@ -579,6 +586,40 @@ class PODBotDesktop(ctk.CTk):
             card, "Lưu ý: không chia sẻ API key, token hoặc ảnh chụp màn hình chứa thông tin bí mật.",
             11, fg=WARNING, wraplength=730,
         ).pack(anchor="w", padx=20, pady=(14, 20))
+        limits = self._card(page)
+        limits.pack(fill="x", padx=8, pady=(0, 14))
+        self._label(limits, "GIỚI HẠN API VÀ KHO KHÓA WINDOWS", 14, bold=True).pack(
+            anchor="w", padx=20, pady=(16, 8),
+        )
+        self._label(
+            limits,
+            "Số lượt GỌI API có thể tính phí tối đa mỗi nhà cung cấp trong một ngày "
+            "(tính cả Gemini SEO). Đây KHÔNG phải hạn mức USD hay số tiền đã trừ; "
+            "hãy đặt hạn mức tiền thật ở dashboard nhà cung cấp.",
+            11, fg=MUTED, wraplength=720,
+        ).pack(anchor="w", padx=20, pady=(0, 9))
+        row = ctk.CTkFrame(limits, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=(0, 12))
+        ctk.CTkEntry(
+            row, textvariable=self.paid_calls_cap, width=80, height=37,
+            fg_color=BG, border_color=BORDER,
+        ).pack(side="left", padx=(0, 8))
+        self._button(row, "Lưu giới hạn ngày", self.save_api_cap, width=175).pack(side="left")
+        self._label(
+            limits, "Mặc định 3 lượt / nhà cung cấp / ngày; 0 sẽ chặn mọi API tính phí. "
+            "Tác vụ đã gửi không được hoàn lượt vì có thể đã bị tính tiền.",
+            11, fg=WARNING, wraplength=720,
+        ).pack(anchor="w", padx=20, pady=(0, 13))
+        actions = ctk.CTkFrame(limits, fg_color="transparent")
+        actions.pack(fill="x", padx=20, pady=(0, 19))
+        for label, callback in (
+            ("Lưu key vào Windows", self.store_api_keys),
+            ("Khôi phục key", self.restore_api_keys),
+            ("Xóa key đã lưu", self.clear_api_keys),
+        ):
+            self._button(actions, label, callback, width=170).pack(
+                side="left", padx=(0, 9),
+            )
         other = self._card(page)
         other.pack(fill="x", padx=8, pady=(0, 17))
         self._label(other, "Tệp và quyền riêng tư", 16, bold=True).pack(
@@ -599,6 +640,56 @@ class PODBotDesktop(ctk.CTk):
             buttons, "Sửa danh sách từ khóa cảnh báo",
             self.edit_blocklist, width=255,
         ).pack(side="left")
+
+    def save_api_cap(self) -> None:
+        try:
+            set_daily_limit(int(self.paid_calls_cap.get()))
+            self.message.set("Đã lưu hạn mức số lượt API có thể tính phí.")
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("Hạn mức API không hợp lệ", str(exc))
+
+    def store_api_keys(self) -> None:
+        if not messagebox.askyesno(
+            "Lưu API key vào Windows Credential Manager",
+            "Chỉ lưu các key đang nhập trên máy này, bằng kho lưu trữ hệ điều hành. "
+            "Bạn có thể xóa bất cứ lúc nào. Đồng ý lưu?",
+        ):
+            return
+        try:
+            count = remember_credentials(
+                {name: variable.get() for name, variable in self.keys.items()},
+                confirmed=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Không lưu được API key", str(exc))
+            return
+        messagebox.showinfo("Kho khóa Windows", f"Đã lưu {count} API key.")
+
+    def restore_api_keys(self) -> None:
+        if not messagebox.askyesno(
+            "Khôi phục API key", "Lấy các API key từ Windows Credential Manager vào phiên chạy này?",
+        ):
+            return
+        try:
+            found = restore_credentials(confirmed=True)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Không đọc được kho khóa", str(exc))
+            return
+        for name, key in found.items():
+            self.keys[name].set(key)
+        self.message.set(f"Đã khôi phục {len(found)} API key từ Windows.")
+
+    def clear_api_keys(self) -> None:
+        if not messagebox.askyesno(
+            "Xóa API key đã lưu", "Xóa toàn bộ API key của PODBot đã lưu trong Windows?",
+        ):
+            return
+        try:
+            removed = erase_credentials(confirmed=True)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Không xóa được kho khóa", str(exc))
+            return
+        self.message.set(f"Đã xóa {removed} API key trong kho Windows.")
 
     def refresh(self) -> None:
         self.records = {entry["id"]: entry for entry in list_designs()}

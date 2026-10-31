@@ -19,8 +19,8 @@ CustomTkinter GUI tiếng Việt (modern_app.py) / CLI
 - Fingerprint `v2:` sử dụng dHash nền xám kèm alpha. Hash 16 ký tự cũ (v1) không so với v2, cũng không được dùng để khẳng định trùng. Có thể reprocess để tái tính hash trên thiết kế cũ.
 - `audit_image` là nguồn duy nhất của bảng kích thước canvas và các check. `quality.py` giữ API cũ nhưng chỉ chuyển đổi kết quả audit.
 - RemBg `.[bg]` có thể tự tải weights khi người dùng chủ động chọn tách nền. EXE thông thường không nhúng weights/các thư viện nặng.
-- Không lưu key API vào source/manifest và không tự thanh toán/fallback/retry. Không tự động đăng sàn hoặc vượt CAPTCHA.
-- Không có OCR, SQLite queue, keyring, ngân sách theo provider, installer, code-signing hoặc lockfile đầy đủ. `--onefile --windowed` có thể bị antivirus chặn; bản production tương lai nên hỗ trợ `--onedir`.
+- Không lưu key API vào source/manifest; chỉ lưu vào kho khóa OS sau xác nhận của người dùng. SQLite lưu lượt gọi có thể tính phí mỗi provider mỗi ngày trước khi gửi API và không tự thanh toán/fallback/retry. Không tự động đăng sàn hoặc vượt CAPTCHA.
+- Không có OCR, SQLite queue, giới hạn USD chính xác theo provider, installer, code-signing hoặc lockfile đầy đủ. `--onefile --windowed` có thể bị antivirus chặn; bản production tương lai nên hỗ trợ `--onedir`.
 - CI trên Windows chạy pytest, Ruff, PyInstaller và smoke-check tồn tại EXE; chưa kiểm tra GUI thủ công ở mọi DPI.
 
 Xem [README](../README.md) và [chính sách xuất bản](PUBLISHING_POLICY.md).

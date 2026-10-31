@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "podbot"
-version = "1.0.0rc1"
+version = "1.0.0rc2"
 description = "Local-first POD design, SEO and assisted publishing desktop application"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["Pillow>=10.4,<13", "customtkinter>=5.2.2,<7"]
+dependencies = ["Pillow>=10.4,<13", "customtkinter>=5.2.2,<7", "keyring>=25,<27"]
 
 [project.optional-dependencies]
 hf = ["huggingface_hub>=0.34,<2"]
