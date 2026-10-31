@@ -8,6 +8,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from podbot.seo import normalize_metadata
 from podbot.settings import designs_directory
 
 ALLOWED_STATES = {"draft", "approved", "uploaded"}
@@ -77,3 +78,25 @@ def export_csv(target: Path, platform: str, root: Path | None = None) -> int:
                 "platform": platform, "prompt": entry["prompt"],
             })
     return len(records)
+
+
+def update_seo(
+    design_id: str,
+    title: str,
+    description: str,
+    tags: list[str],
+    root: Path | None = None,
+) -> dict:
+    """Apply explicitly reviewed SEO edits to the stored local manifest."""
+    import re
+
+    if not re.fullmatch(r"[0-9a-f]{32}", design_id):
+        raise ValueError("Invalid design ID.")
+    metadata = normalize_metadata(title, description, tags)
+    folder = (root or designs_directory()) / design_id
+    record = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    if record.get("id") != design_id:
+        raise ValueError("Manifest ID mismatch.")
+    record["seo"] = metadata.to_dict()
+    save_manifest(folder, record)
+    return record

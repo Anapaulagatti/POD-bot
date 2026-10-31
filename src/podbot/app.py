@@ -18,7 +18,7 @@ from podbot.quality import assess_design
 from podbot.trends import read_trends
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 from podbot.settings import data_directory
-from podbot.storage import export_csv, list_designs, update_state
+from podbot.storage import export_csv, list_designs, update_seo, update_state
 
 UPLOAD_PAGES = {
     "redbubble": "https://www.redbubble.com/portfolio/images/new",
@@ -116,6 +116,7 @@ class PODBotApp(tk.Tk):
         ttk.Button(actions, text="Refresh", command=self.refresh_queue).pack(side="left", padx=3)
         ttk.Button(actions, text="Open PNG", command=self.open_selected).pack(side="left", padx=3)
         ttk.Button(actions, text="Preflight", command=self.preflight).pack(side="left", padx=3)
+        ttk.Button(actions, text="Edit SEO", command=self.edit_seo).pack(side="left", padx=3)
         ttk.Button(actions, text="T-shirt mockup", command=self.create_mockup).pack(
             side="left", padx=3
         )
@@ -373,11 +374,66 @@ class PODBotApp(tk.Tk):
         webbrowser.open(target.as_uri())
         self.status.set("Illustrative T-shirt mockup created locally.")
 
+    def edit_seo(self) -> None:
+        item = self.selected()
+        if not item:
+            return
+        metadata = item["seo"]
+        popup = tk.Toplevel(self)
+        popup.title("Edit SEO draft")
+        popup.geometry("730x510")
+        popup.transient(self)
+        popup.grab_set()
+        frame = ttk.Frame(popup, padding=18)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Title (80 characters maximum)").pack(anchor="w")
+        title = tk.StringVar(value=metadata["title"])
+        ttk.Entry(frame, textvariable=title).pack(fill="x", pady=5)
+        ttk.Label(frame, text="Description (700 characters maximum)").pack(anchor="w")
+        description = tk.Text(frame, height=8, wrap="word")
+        description.pack(fill="both", expand=True, pady=5)
+        description.insert("1.0", metadata["description"])
+        ttk.Label(frame, text="Tags (comma-separated; 15 maximum)").pack(anchor="w")
+        tags = tk.Text(frame, height=4, wrap="word")
+        tags.pack(fill="x", pady=5)
+        tags.insert("1.0", ", ".join(metadata["tags"]))
+
+        def save() -> None:
+            try:
+                update_seo(
+                    item["id"], title.get(),
+                    description.get("1.0", "end").strip(),
+                    tags.get("1.0", "end").split(","),
+                )
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("SEO could not be saved", str(exc), parent=popup)
+                return
+            popup.destroy()
+            self.refresh_queue()
+            self.tree.selection_set(item["id"])
+            self.show_selected()
+            self.status.set("Saved manually reviewed SEO metadata.")
+
+        ttk.Button(frame, text="Save metadata", command=save).pack(anchor="e", pady=12)
+
     def set_state(self, state: str) -> None:
         item = self.selected()
         if not item:
             return
         platform = self.selected_platform.get()
+        if state == "approved":
+            try:
+                report = assess_design(item, platform)
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("Preflight is required", str(exc))
+                return
+            if report.issues and not messagebox.askyesno(
+                "Quality warnings",
+                "Print preflight found potential issues:\\n\\n"
+                + "\\n".join(report.issues)
+                + "\\n\\nHave you reviewed and explicitly accepted these risks?",
+            ):
+                return
         if state == "uploaded" and not messagebox.askyesno(
             "Manual confirmation", f"Did you PERSONALLY upload this design to {platform}?",
         ):
