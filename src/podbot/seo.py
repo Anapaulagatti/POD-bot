@@ -9,6 +9,8 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
 
+from podbot.http_utils import read_limited_json
+
 
 @dataclass
 class SEOMetadata:
@@ -86,7 +88,7 @@ def gemini_seo(niche: str, keywords: str, prompt: str, api_key: str = "") -> SEO
     )
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
-            result = json.load(response)
+            result = read_limited_json(response)
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"Gemini SEO API returned HTTP {exc.code}.") from exc
     try:
