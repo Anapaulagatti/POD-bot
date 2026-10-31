@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.1.0 (2026-10-31 · Vietnamese desktop UI)
+- Thay giao diện desktop mặc định bằng CustomTkinter MIT, tông xanh than/xanh ngọc và thanh điều hướng trái.
+- 5 màn hình tiếng Việt: Tổng quan, Sáng tạo AI, Thư viện thiết kế, Xu hướng, Cài đặt API.
+- Thêm dashboard số liệu, thư viện có ảnh xem trước và thao tác quản lý/duyệt từng sản phẩm.
+- Giữ lại model marketplace, import ảnh local, SEO, preflight, xử lý ảnh, preview màu áo và mockup, quy trình đăng thủ công an toàn.
+- Bổ sung --collect-all customtkinter cho GitHub Actions/PyInstaller one-file Windows và tài liệu tiếng Việt.
+- Còn cần kiểm thử giao diện thực tế trên Windows/DPI, không tuyên bố EXE đã được ký số.
+
 ## 4.0.0 (2026-10-31, provider marketplace preview)
 - Added 14 manually selectable image models: Gemini 3.1 Flash/Lite, 3 Pro, Nano Banana 2.1; OpenAI GPT Image 2.5 Flare/Sunburst; Replicate FLUX; fal.ai FLUX2/Z-Image; Stability Core/Ultra; retained Cloudflare/HF.
 - Paid model consent in the desktop UI and --paid-ok for CLI, no silent provider fallbacks.

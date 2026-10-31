@@ -1,4 +1,8 @@
-# PODBot Studio 4.1.0 (Giao diện tiếng Việt)
+# PODBot Studio 4.1.0 · Giao diện tiếng Việt
+
+**Hướng dẫn sử dụng bằng tiếng Việt:** [Bắt đầu tại đây](docs/HUONG_DAN_GIAO_DIEN_VI.md) · [Nghiên cứu repository giao diện](docs/UI_REDESIGN_VI.md)
+
+Phiên bản 4.1 thay giao diện Tkinter cũ bằng desktop UI CustomTkinter thiết kế lại: thanh điều hướng, tổng quan trực quan, tạo ảnh AI, thư viện xem ảnh và phê duyệt, xu hướng, cài đặt API. Mọi thao tác đăng Redbubble/TeePublic vẫn cần xác nhận thủ công.
 
 **Local-first Windows Print-On-Demand studio:** generate original AI design drafts, prepare transparent-canvas PNG files, create SEO metadata, review drafts for Redbubble and TeePublic, then upload manually. Written in Python, designed to become a single `PODBot.exe`.
 
