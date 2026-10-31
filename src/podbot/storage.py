@@ -56,7 +56,7 @@ def update_state(design_id: str, platform: str, state: str, root: Path | None = 
 
         return approve_listing(design_id, platform, root=root)
     if state == "uploaded":
-        raise ValueError("Use mark_uploaded(..., confirmed=True) after manual upload.")
+        raise ValueError("Design not approved: use mark_uploaded(..., confirmed=True) after manual upload.")
     file = (root or designs_directory()) / design_id / "manifest.json"
     record = json.loads(file.read_text(encoding="utf-8"))
     if record.get("id") != design_id:

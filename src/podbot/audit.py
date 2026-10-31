@@ -58,7 +58,7 @@ def fingerprint(image: Image.Image) -> str:
     preview = Image.new("RGBA", rgba.size, "white")
     preview.alpha_composite(rgba)
     small = preview.convert("L").resize((9, 8), Image.Resampling.LANCZOS)
-    pixels = list(small.getdata())
+    pixels = list(small.tobytes())
     result = 0
     for y in range(8):
         for x in range(8):
@@ -117,7 +117,7 @@ def audit_image(image: Image.Image, platform: str) -> list[Check]:
                             "TeePublic requests >=1500x1995 visible artwork pixels."))
     # Counts and contrast are advisory only; thresholds are user-calibratable later.
     core = small.convert("RGB").quantize(colors=16)
-    colors = len({n for n in core.getdata()})
+    colors = sum(1 for count in core.histogram() if count)
     output.append(Check("palette", "pass" if colors <= 12 else "warn",
                         str(colors), "Advisory palette complexity estimate, not legal safety."))
     core_luma = ImageStat.Stat(small.convert("L")).mean[0]

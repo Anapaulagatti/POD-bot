@@ -55,7 +55,7 @@ def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None 
     ])
     blocked = find_blocked_terms(combined, get_blocklist() if blocklist is None else blocklist)
     if blocked:
-        raise ValueError(f"Blocklist requires review: {', '.join(blocked[:5])}")
+        raise ValueError(f"blocklist requires review: {', '.join(blocked[:5])}")
     source = Path(entry["print_file"])
     if not source.exists():
         raise ValueError("Print image is missing.")
