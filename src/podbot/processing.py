@@ -5,7 +5,6 @@ External binaries/models are NEVER bundled or downloaded automatically.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -136,3 +135,54 @@ def process_image(image: Image.Image, target: Path, options: ProcessOptions) -> 
                             margin=options.margin, feather=options.feather)
     details["steps"] = steps or ["crop", "lanczos"]
     return details
+
+
+
+def process_stored_design(design_id: str, options: ProcessOptions,
+                          root: Path | None = None) -> dict:
+    """Rebuild from immutable source, never silently overwrite prior print assets."""
+    import json
+    import re
+    import uuid
+
+    from podbot.audit import audit_image, fingerprint
+    from podbot.settings import designs_directory
+    from podbot.storage import save_manifest
+
+    if not re.fullmatch(r"[0-9a-f]{32}", design_id):
+        raise ValueError("Invalid design ID.")
+    folder = (root or designs_directory()) / design_id
+    manifest = folder / "manifest.json"
+    record = json.loads(manifest.read_text(encoding="utf-8"))
+    if record.get("id") != design_id:
+        raise ValueError("Manifest ID mismatch.")
+    source = Path(record["source_file"])
+    if not source.is_file():
+        raise ValueError("Original source PNG is missing.")
+    target = folder / f"processed_{uuid.uuid4().hex[:12]}.png"
+    try:
+        with Image.open(source) as image:
+            original = image.convert("RGBA")
+            details = process_image(original, target, options)
+        with Image.open(target) as processed:
+            fingerprint_value = fingerprint(processed)
+            audits = {
+                platform: [c.to_dict() for c in audit_image(processed, platform)]
+                for platform in ("redbubble", "teepublic")
+            }
+        record["print_file"] = str(target.resolve())
+        record["output_size"] = list(options.target_size)
+        record["processing"] = details
+        record["fingerprint"] = fingerprint_value
+        record["quality_checks"] = audits
+        record["platform_status"] = {"redbubble": "draft", "teepublic": "draft"}
+        record["approval_evidence"] = {}
+        record["quality_warning"] = (
+            "Reprocessing invalidated approvals. Inspect alpha, actual source resolution "
+            "and both platform quality reports before approving."
+        )
+        save_manifest(folder, record)
+        return record
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
