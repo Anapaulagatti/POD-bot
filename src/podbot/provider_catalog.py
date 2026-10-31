@@ -20,6 +20,7 @@ from typing import Any
 
 from PIL import Image
 
+from podbot.api_limits import reserve_paid_request
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
@@ -326,6 +327,22 @@ class StabilityImage:
         return _check_image(raw)
 
 
+@dataclass
+class MeteredImageProvider:
+    """Reserves an attempt *before* potentially billed image generation."""
+
+    wrapped: Any
+    vendor: str
+    name: str
+
+    def generate(self, prompt: str) -> Image.Image:
+        reserve_paid_request(self.vendor)
+        return self.wrapped.generate(prompt)
+
+    def __getattr__(self, field: str):
+        return getattr(self.wrapped, field)
+
+
 def get_spec(selection: str) -> ModelSpec:
     if selection not in MODELS:
         raise ValueError("Unknown model identifier; use models list.")
@@ -365,4 +382,4 @@ def make_provider(
     if not key:
         raise ValueError(f"Missing {spec.env_key}; enter it in Settings or environment.")
     provider.name = f"{spec.vendor}:{spec.model}"
-    return provider
+    return MeteredImageProvider(provider, spec.vendor, provider.name) if spec.paid else provider

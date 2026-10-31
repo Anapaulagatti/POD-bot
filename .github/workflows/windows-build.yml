@@ -23,7 +23,7 @@ jobs:
       - name: Lint
         run: python -m ruff check src tests
       - name: Build single-file EXE
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules huggingface_hub src/podbot/app.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
       - name: Smoke-check Windows EXE output
         shell: pwsh
         run: |

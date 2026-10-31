@@ -11,6 +11,12 @@ from PIL import Image
 from podbot import provider_catalog as catalog
 
 
+@pytest.fixture(autouse=True)
+def sandbox_paid_requests(monkeypatch, tmp_path):
+    monkeypatch.setenv("PODBOT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PODBOT_PAID_CALLS_PER_DAY", "100")
+
+
 def png64() -> str:
     memory = io.BytesIO()
     Image.new("RGBA", (32, 48), (50, 100, 200, 0)).save(memory, "PNG")

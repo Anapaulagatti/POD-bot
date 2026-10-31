@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 from podbot.audit import audit_image, make_color_preview
+from podbot.api_limits import get_daily_limit, set_daily_limit
 from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
@@ -36,6 +37,8 @@ def main() -> None:
     import_cmd.add_argument("--file", type=Path, required=True)
     import_cmd.add_argument("--niche", required=True)
     import_cmd.add_argument("--keywords", default="")
+    api_cap = commands.add_parser("api-limit", help="View or change daily paid API request cap")
+    api_cap.add_argument("--set", type=int)
     commands.add_parser("models", help="List image providers; no credentials exposed")
     commands.add_parser("list", help="Display saved draft status")
     csv = commands.add_parser("export", help="Generate manual-upload CSV")
@@ -89,6 +92,10 @@ def main() -> None:
     elif args.command == "import":
         result = import_design(args.file, args.niche, args.keywords)
         print(json.dumps({"id": result["id"], "path": result["print_file"]}))
+    elif args.command == "api-limit":
+        if args.set is not None:
+            set_daily_limit(args.set)
+        print(f"Daily potential-billing calls per provider: {get_daily_limit()}")
     elif args.command == "models":
         for spec in CATALOG:
             print(f"{spec.id}: {spec.label} [{spec.env_key}] — {spec.hint}")
