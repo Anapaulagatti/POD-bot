@@ -67,7 +67,7 @@ def reserve_paid_request(provider: str, *, day: str | None = None) -> int:
     limit = get_daily_limit()
     if limit == 0:
         raise PermissionError("Paid API calls are disabled by the local daily limit.")
-    today = day or datetime.now(UTC).date().isoformat()
+    today = day or datetime.now().astimezone().date().isoformat()
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", today):
         raise ValueError("Invalid reservation date.")
     folder = data_directory()
