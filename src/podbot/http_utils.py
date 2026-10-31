@@ -20,5 +20,5 @@ def read_limited_json(response, max_bytes: int = DEFAULT_JSON_LIMIT) -> dict:
     except (ValueError, UnicodeError) as exc:
         raise RuntimeError("Provider returned malformed JSON.") from exc
     if not isinstance(data, dict):
-        raise RuntimeError("Provider JSON response must be an object.")
+        raise TypeError("Provider JSON response must be an object.")
     return data
