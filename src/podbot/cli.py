@@ -8,8 +8,11 @@ from pathlib import Path
 
 from PIL import Image
 
+from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
+from podbot.processing import ProcessOptions, process_stored_design
+from podbot.publishing import approve_listing, confirm_rights, mark_uploaded
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 from podbot.quality import assess_design
 from podbot.storage import export_csv, list_designs, update_state
@@ -41,6 +44,25 @@ def main() -> None:
     preflight.add_argument("--platform", choices=["redbubble", "teepublic"], required=True)
     mockup = commands.add_parser("mockup", help="Create local T-shirt preview")
     mockup.add_argument("--id", required=True)
+    rights = commands.add_parser("rights", help="Record explicit commercial rights review")
+    rights.add_argument("--id", required=True)
+    rights.add_argument("--confirm", action="store_true")
+    approve = commands.add_parser("approve", help="Approve only when QC and rights pass")
+    approve.add_argument("--id", required=True)
+    approve.add_argument("--platform", choices=["redbubble", "teepublic"], required=True)
+    uploaded = commands.add_parser("uploaded", help="Record manual marketplace upload")
+    uploaded.add_argument("--id", required=True)
+    uploaded.add_argument("--platform", choices=["redbubble", "teepublic"], required=True)
+    uploaded.add_argument("--confirm", action="store_true")
+    process = commands.add_parser("process", help="Rebuild cropped transparent canvas")
+    process.add_argument("--id", required=True)
+    process.add_argument("--rembg", type=Path)
+    process.add_argument("--esrgan", type=Path)
+    check = commands.add_parser("audit", help="Run detailed local QC checks")
+    check.add_argument("--id", required=True)
+    check.add_argument("--platform", choices=["redbubble", "teepublic"], required=True)
+    preview = commands.add_parser("colors", help="Export four-color fabric preview")
+    preview.add_argument("--id", required=True)
     args = parser.parse_args()
     if args.command == "create":
         provider = (
@@ -71,6 +93,34 @@ def main() -> None:
             with Image.open(source) as image:
                 create_shirt_mockup(image, target)
             print(f"Preview created: {target}")
+    elif args.command == "rights":
+        if not args.confirm:
+            parser.error("Use --confirm only after personally checking commercial rights.")
+        print(confirm_rights(args.id)["rights_confirmed_at"])
+    elif args.command == "approve":
+        print(json.dumps(approve_listing(args.id, args.platform)["approval_evidence"][args.platform]))
+    elif args.command == "uploaded":
+        if not args.confirm:
+            parser.error("--confirm requires you to have actually uploaded this design.")
+        print(mark_uploaded(args.id, args.platform, confirmed=True)["platform_status"])
+    elif args.command == "process":
+        options = ProcessOptions(
+            remove_background=bool(args.rembg), rembg_binary=args.rembg,
+            upscale=bool(args.esrgan), esrgan_binary=args.esrgan,
+        )
+        print(json.dumps(process_stored_design(args.id, options)["processing"], indent=2))
+    elif args.command in {"audit", "colors"}:
+        entry = next((r for r in list_designs() if r["id"] == args.id), None)
+        if entry is None:
+            parser.error("Design ID not found.")
+        with Image.open(entry["print_file"]) as image:
+            if args.command == "audit":
+                print(json.dumps([c.to_dict() for c in audit_image(image, args.platform)],
+                                 indent=2))
+            else:
+                path = Path(entry["print_file"]).parent / "preview-4-colors.png"
+                make_color_preview(image, path)
+                print(path)
     elif args.command == "review":
         updated = update_state(args.id, args.platform, args.state)
         print(updated["platform_status"])
