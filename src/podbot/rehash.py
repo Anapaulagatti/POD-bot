@@ -25,7 +25,7 @@ def rehash_designs(root: Path | None = None, *, dry_run: bool = False) -> dict[s
         result["scanned"] += 1
         try:
             entry = json.loads(manifest.read_text(encoding="utf-8"))
-            if entry.get("id") != manifest.parent.name:
+            if not isinstance(entry, dict) or entry.get("id") != manifest.parent.name:
                 result["failed"] += 1
                 continue
             if re.fullmatch(r"v2:[a-f0-9]{32}", str(entry.get("fingerprint", ""))):
@@ -33,6 +33,9 @@ def rehash_designs(root: Path | None = None, *, dry_run: bool = False) -> dict[s
                 continue
             # Local folder is canonical; never follow an arbitrary path from a JSON manifest.
             source = manifest.parent / "source.png"
+            if not source.resolve().is_relative_to(manifest.parent.resolve()):
+                result["failed"] += 1
+                continue
             if not source.is_file():
                 result["missing"] += 1
                 continue
