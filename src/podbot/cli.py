@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
+from podbot.audit import audit_image, make_color_preview
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.processing import ProcessOptions, process_stored_design
