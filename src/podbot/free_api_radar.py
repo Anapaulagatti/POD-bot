@@ -17,6 +17,8 @@ from podbot.auth_transport import open_authenticated
 
 CATALOG_URL = "https://gen.pollinations.ai/image/models?source=official"
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
+MAX_ACCOUNT_JSON = 64 * 1024
+KEY_ENDPOINT = "https://gen.pollinations.ai/account/key"
 REFRESH_SECONDS = 6 * 60 * 60
 MODEL_ID_PATTERN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_./:-]{2,140}\Z")
 
@@ -63,10 +65,7 @@ def parse_image_offers(payload: list | dict) -> tuple[ImageOffer, ...]:
             endpoints = []
         if not isinstance(output, list):
             output = []
-        supports_images = any(
-            isinstance(item, str) and "images/generations" in item.casefold()
-            for item in endpoints
-        ) or "image" in output
+        supports_images = "/v1/images/generations" in endpoints and "image" in output
         # A model ID alone is not proof of ability to use the POST image route.
         eligible = access == "quest-eligible" and supports_images
         display = str(entry.get("name") or entry.get("title") or model)[:100]
@@ -109,3 +108,43 @@ def refresh_public_catalog(*, force: bool = False, now: float | None = None) -> 
     offers = parse_image_offers(payload)
     _CACHE = CatalogSnapshot(offers, current)
     return _CACHE
+
+def verify_quest_only_key(key: str) -> None:
+    """Read-only key preflight: never permit spending Paid Pollen.
+
+    The official KeyInfo contract includes valid/type/questPollenOnly.
+    An omitted or false quest-only flag denies generation rather than guessing.
+    """
+    if not key.startswith("sk_") or len(key) > 512:
+        raise ValueError("Use your own scoped Pollinations secret key (sk_).")
+    request = urllib.request.Request(
+        KEY_ENDPOINT, headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {key}",
+            "User-Agent": "PODBotStudio/1.0",
+        }, method="GET",
+    )
+    try:
+        with open_authenticated(request, timeout=12) as response:
+            raw = response.read(MAX_ACCOUNT_JSON + 1)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(
+            f"Pollinations key validation rejected (HTTP {exc.code})."
+        ) from None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise RuntimeError("Pollinations key validation network request failed.") from None
+    if len(raw) > MAX_ACCOUNT_JSON:
+        raise RuntimeError("Pollinations key response exceeded size limit.")
+    try:
+        data = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise RuntimeError("Pollinations key validation returned malformed JSON.") from None
+    if not isinstance(data, dict) or data.get("valid") is not True:
+        raise PermissionError("Pollinations key validity could not be confirmed.")
+    if data.get("type") != "secret":
+        raise PermissionError("Only a personal sk_ secret key may generate images.")
+    if data.get("questPollenOnly") is not True:
+        raise PermissionError(
+            "Pollinations key is NOT Quest-Pollen-only. Create a sk_ key with "
+            "questPollenOnly=true and a small Pollen budget to test safely."
+        )
