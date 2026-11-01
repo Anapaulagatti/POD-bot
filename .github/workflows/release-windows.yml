@@ -27,8 +27,10 @@ jobs:
       - name: Install committed Windows hash-locked dependencies
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m pip install --require-hashes -r requirements/windows-py312.lock.txt
-          python -m pip install --no-deps -e .
+          python -m pip install --no-build-isolation --no-deps -e .
           python -m pip check
       - name: Audit installed dependencies (fail closed)
         run: python -m pip_audit --local
