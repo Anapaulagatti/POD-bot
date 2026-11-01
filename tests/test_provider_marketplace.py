@@ -148,7 +148,7 @@ def test_stability_contract_is_multipart_without_key_in_body(monkeypatch):
         requests.append(request)
         return FakeResponse()
 
-    monkeypatch.setattr(catalog.urllib.request, "urlopen", fake_open)
+    monkeypatch.setattr(catalog, "open_authenticated", fake_open)
     provider = catalog.make_provider("stability-core", {"STABILITY_API_KEY": "fake"},
                                      allow_paid=True)
     assert provider.generate("art").size == (32, 48)
@@ -177,7 +177,7 @@ def test_openai_http_error_does_not_leak_credentials(monkeypatch):
             {}, None
         )
 
-    monkeypatch.setattr(catalog.urllib.request, "urlopen", fail)
+    monkeypatch.setattr(catalog, "open_authenticated", fail)
     with pytest.raises(RuntimeError) as caught:
         catalog.make_provider("openai-sunburst",
                               {"OPENAI_API_KEY": "fake-secret"}, allow_paid=True).generate("test")
