@@ -112,6 +112,52 @@ class StudioPages:
             "1.0", "Original minimalist mountain sunrise illustration, crisp shapes, "
             "centered composition for T-shirt print, no lettering, no logos",
         )
+        builder = ctk.CTkFrame(form, fg_color=CARD_ALT, corner_radius=11)
+        builder.pack(fill="x", padx=20, pady=(13, 4))
+        self._label(
+            builder, "BỘ DỰNG PROMPT CÓ CẤU TRÚC · OFFLINE", 11, bold=True, fg=ACCENT,
+        ).pack(anchor="w", padx=13, pady=(12, 4))
+        self._label(
+            builder, "Không cần GPU, không gửi API. Dựng prompt rồi kiểm tra trước khi tạo ảnh.",
+            10, fg=MUTED, wraplength=670,
+        ).pack(anchor="w", padx=13, pady=(0, 7))
+        inputs = ctk.CTkFrame(builder, fg_color="transparent")
+        inputs.pack(fill="x", padx=13)
+        inputs.grid_columnconfigure((0, 1), weight=1)
+        fields_spec = (
+            ("CHỦ THỂ", self.recipe_subject),
+            ("BẢNG MÀU (1-6 mã #RRGGBB)", self.recipe_palette),
+            ("CHỮ GỐC (NẾU CHỌN ORIGINAL)", self.recipe_text),
+        )
+        for index, (label, variable) in enumerate(fields_spec):
+            panel = ctk.CTkFrame(inputs, fg_color="transparent")
+            panel.grid(row=index, column=0, columnspan=2, sticky="ew", pady=(1, 5))
+            self._label(panel, label, 10, fg=MUTED).pack(anchor="w", pady=(0, 3))
+            ctk.CTkEntry(
+                panel, textvariable=variable, height=33, fg_color=BG,
+                border_color=BORDER, text_color=WHITE,
+            ).pack(fill="x")
+        dropdowns = (
+            ("PHONG CÁCH", self.recipe_style,
+             ["minimal-vector", "line-art", "vintage-screenprint", "paper-cut"]),
+            ("BỐ CỤC", self.recipe_layout, ["centered", "badge", "stacked"]),
+            ("NỀN", self.recipe_background, ["transparent", "flat-white"]),
+            ("QUY TẮC CHỮ", self.recipe_lettering, ["none", "original"]),
+        )
+        for index, (label, variable, choices) in enumerate(dropdowns):
+            panel = ctk.CTkFrame(inputs, fg_color="transparent")
+            panel.grid(row=3 + index // 2, column=index % 2, sticky="ew",
+                       padx=(0, 6) if index % 2 == 0 else (6, 0), pady=4)
+            self._label(panel, label, 10, fg=MUTED).pack(anchor="w", pady=(0, 3))
+            ctk.CTkOptionMenu(
+                panel, values=choices, variable=variable, height=34,
+                fg_color=BG, button_color=BORDER, text_color=WHITE,
+            ).pack(fill="x")
+        self._button(
+            builder, "✦  Dựng prompt (0 phí API)", self.build_structured_prompt,
+            width=245,
+        ).pack(anchor="e", padx=13, pady=(9, 13))
+
         fields = ctk.CTkFrame(form, fg_color="transparent")
         fields.pack(fill="x", padx=20, pady=(14, 6))
         fields.grid_columnconfigure((0, 1), weight=1)
