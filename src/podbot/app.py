@@ -7,9 +7,11 @@ PODBotApp = PODBotDesktop
 
 def smoke_test() -> None:
     """Read-only packaging test that never opens a window or calls a paid API."""
-    from tempfile import TemporaryDirectory
     from pathlib import Path
+    from tempfile import TemporaryDirectory
+
     from PIL import Image, ImageDraw
+
     from podbot.flat_background import remove_flat_background
     from podbot.image_review import inspect_halo
     from podbot.job_queue import JobQueue
