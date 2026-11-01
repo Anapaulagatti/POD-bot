@@ -1,7 +1,6 @@
 """Offline queue, real-world edge proxies and no-network OCR tests."""
 
 import subprocess
-from pathlib import Path
 
 import pytest
 from PIL import Image, ImageDraw, ImageFilter
