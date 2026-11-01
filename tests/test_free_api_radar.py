@@ -10,8 +10,7 @@ import urllib.request
 import pytest
 from PIL import Image
 
-from podbot import free_api_radar, model_discovery, provider_catalog
-from podbot.auth_transport import NoCredentialRedirect
+from podbot import auth_transport, free_api_radar, model_discovery, provider_catalog
 
 
 OFFERS = [
@@ -76,7 +75,7 @@ def test_public_catalog_rejects_redirect_or_truncated_body(monkeypatch):
         real(urllib.request.Request("https://gen.pollinations.ai.evil.test/models"),
              timeout=1)
     with pytest.raises(RuntimeError, match="protect API credentials"):
-        NoCredentialRedirect().redirect_request(
+        auth_transport.NoCredentialRedirect().redirect_request(
             urllib.request.Request("https://gen.pollinations.ai/image/models"),
             None, 302, "redirect", {},
             "https://third-party.test/collect",
