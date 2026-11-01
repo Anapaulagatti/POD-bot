@@ -7,6 +7,7 @@ OCR requires a separately installed Tesseract executable; no models/downloads.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageOps
+
+from podbot.audit import Check, find_blocked_terms
 
 
 @dataclass(frozen=True)
@@ -63,30 +66,77 @@ def create_fabric_preview(image: Image.Image, destination: Path) -> Path:
     return destination
 
 
+def review_ocr(
+    report: OCRReport, blocked_terms: list[str], *, prompt: str = ""
+) -> list[Check]:
+    """Advisory OCR + hard block only for recognized exact blocklist phrases."""
+    if not report.available:
+        return [Check(
+            "ocr_text", "warn", "unavailable",
+            "Offline OCR unavailable. Check all text in the artwork manually.",
+        )]
+    text = report.text.strip()
+    blocked = find_blocked_terms(text, blocked_terms)
+    if blocked:
+        return [Check(
+            "ocr_text", "fail", ", ".join(blocked[:5]),
+            "OCR detected words on your local blocklist; review artwork before approval.",
+        )]
+    output = [Check(
+        "ocr_text", "pass" if text else "warn",
+        text[:140] if text else "nothing recognized",
+        "OCR is imperfect; inspect all visible text and commercial rights manually.",
+    )]
+    if text and re.search(r"\\b(no\\s+(?:text|words|letters|typography|writing))\\b",
+                          prompt, re.IGNORECASE):
+        output.append(Check(
+            "ocr_unexpected_text", "warn", text[:140],
+            "Words detected even though the prompt requested no text.",
+        ))
+    return output
+
+
 def scan_ocr(
     image: Image.Image, *, executable: str | Path | None = None,
     language: str = "eng",
 ) -> OCRReport:
-    """Run offline OCR without shell, API keys or network; missing OCR is explicit."""
+    """Run local Tesseract on white and dark composites, never on raw RGBA RGB bytes."""
     if language not in {"eng", "vie", "eng+vie"}:
         raise ValueError("Unsupported OCR language.")
     candidate = str(executable or os.environ.get("PODBOT_TESSERACT_PATH") or "tesseract")
     tool = shutil.which(candidate)
     if tool is None:
         return OCRReport(False, "", "Tesseract OCR is not installed or selected.")
-    image = ImageOps.contain(image.convert("RGB"), (1800, 1800))
+    rgba = ImageOps.contain(image.convert("RGBA"), (1800, 1800))
+    is_transparent = rgba.getchannel("A").getextrema()[0] < 255
+    backgrounds = ((255, 255, 255), (0, 0, 0)) if is_transparent else ((255, 255, 255),)
+    lines: list[str] = []
+    seen: set[str] = set()
+    succeeded = False
     with tempfile.TemporaryDirectory(prefix="podbot-ocr-") as temp:
         path = Path(temp) / "image.png"
-        image.save(path)
-        try:
-            result = subprocess.run(
-                [tool, str(path), "stdout", "-l", language],
-                timeout=45, capture_output=True, check=False,
-                shell=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return OCRReport(False, "", "Offline OCR could not complete.")
-    if result.returncode != 0:
+        for rgb in backgrounds:
+            canvas = Image.new("RGBA", rgba.size, (*rgb, 255))
+            canvas.alpha_composite(rgba)
+            canvas.convert("RGB").save(path)
+            try:
+                result = subprocess.run(
+                    [tool, str(path), "stdout", "-l", language],
+                    timeout=45, capture_output=True, check=False,
+                    shell=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if result.returncode != 0:
+                continue
+            succeeded = True
+            for line in result.stdout[:65536].decode("utf-8", errors="replace").splitlines():
+                line = line.strip()
+                signature = line.casefold()
+                if line and signature not in seen:
+                    lines.append(line)
+                    seen.add(signature)
+    if not succeeded:
         return OCRReport(False, "", "OCR engine or language data unavailable.")
-    text = result.stdout[:65536].decode("utf-8", errors="replace").strip()
-    return OCRReport(True, text[:4000], "Review recognized text manually; OCR can be inaccurate.")
+    text = "\n".join(lines)[:4000]
+    return OCRReport(True, text, "OCR is advisory; review text manually on light/dark fabric.")
