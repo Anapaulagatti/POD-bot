@@ -95,7 +95,9 @@ def _decontaminate_edges(
             corrected = []
             for source, color in zip(channels, background):
                 channel = ImageMath.lambda_eval(
-                    lambda p: (p["source"] * 255 - (255 - p["alpha"]) * color) / p["alpha"],
+                    lambda p, background_color=color: (
+                        p["source"] * 255 - (255 - p["alpha"]) * background_color
+                    ) / p["alpha"],
                     source=source, alpha=safe_mask,
                 ).convert("L")
                 corrected.append(channel)
