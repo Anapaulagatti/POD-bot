@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import contextmanager
 import sqlite3
 import time
 import uuid
@@ -51,11 +52,16 @@ class JobQueue:
             """)
             db.execute("CREATE INDEX IF NOT EXISTS idx_jobs_ready ON jobs(status,created)")
 
-    def _db(self) -> sqlite3.Connection:
+    @contextmanager
+    def _db(self):
         db = sqlite3.connect(self.path, timeout=10)
         db.row_factory = sqlite3.Row
-        db.execute("PRAGMA busy_timeout=10000")
-        return db
+        try:
+            db.execute("PRAGMA busy_timeout=10000")
+            with db:
+                yield db
+        finally:
+            db.close()
 
     @staticmethod
     def _validated(kind: str, payload: dict) -> dict:
