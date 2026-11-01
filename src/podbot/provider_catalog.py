@@ -226,7 +226,8 @@ class GeminiImage:
     size: str = "2K"
     name: str = "gemini-image"
 
-    def generate(self, prompt: str) -> Image.Image:
+    def validate_request(self) -> None:
+        """Catch local configuration errors before reserving a paid attempt."""
         if not self.key:
             raise ValueError("Gemini API key is required.")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,99}", self.model):
@@ -235,6 +236,9 @@ class GeminiImage:
             raise ValueError("Invalid Gemini image size.")
         if self.model.endswith("flash-lite-image") and self.size != "1K":
             raise ValueError("Gemini Flash Lite supports 1K output.")
+
+    def generate(self, prompt: str) -> Image.Image:
+        self.validate_request()
         config = {"responseModalities": ["IMAGE"]}
         if self.model in GEMINI_IMAGE_SIZE_MODELS:
             config["imageConfig"] = {"aspectRatio": "4:5", "imageSize": self.size}
@@ -406,6 +410,9 @@ class MeteredImageProvider:
     name: str
 
     def generate(self, prompt: str) -> Image.Image:
+        validate = getattr(self.wrapped, "validate_request", None)
+        if callable(validate):
+            validate()  # Pure local validation must not consume an attempt.
         reserve_paid_request(self.vendor)
         return self.wrapped.generate(prompt)
 
