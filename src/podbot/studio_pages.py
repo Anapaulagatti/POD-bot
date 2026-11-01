@@ -6,7 +6,7 @@ import os
 
 import customtkinter as ctk
 
-from podbot.provider_catalog import CATALOG, LABELS, get_spec
+from podbot.provider_catalog import CATALOG, GEMINI_IMAGE_SIZE_MODELS, LABELS, get_spec
 from podbot.settings import data_directory
 from podbot.studio_theme import (
     ACCENT,
@@ -205,8 +205,14 @@ class StudioPages:
         if model_id:
             spec = get_spec(model_id)
             pricing = "Dịch vụ tính phí" if spec.paid else "Hạn mức / tín dụng có giới hạn"
+            hint = spec.hint
+            if spec.vendor == "gemini" and spec.model not in GEMINI_IMAGE_SIZE_MODELS:
+                hint += (
+                    "  •  Model mới: chưa rõ hỗ trợ độ phân giải. "
+                    "Không gửi imageSize/aspectRatio; dùng đầu ra mặc định."
+                )
             self.model_explanation.configure(
-                text=f"ℹ  {pricing}  •  {spec.hint}  •  API key: {spec.env_key}",
+                text=f"ℹ  {pricing}  •  {hint}  •  API key: {spec.env_key}",
             )
 
     def _library(self) -> None:
