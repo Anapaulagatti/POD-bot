@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import io
 import json
-import urllib.error
 import urllib.request
 
 import pytest
@@ -118,7 +117,6 @@ def test_pollinations_key_probe_is_read_only_before_model_selection(monkeypatch)
 
 
 def test_registration_and_provider_require_explicit_spend_consent(monkeypatch):
-    from podbot.api_limits import reserve_paid_request
     snapshot = free_api_radar.CatalogSnapshot(
         free_api_radar.parse_image_offers(OFFERS), 100
     )
