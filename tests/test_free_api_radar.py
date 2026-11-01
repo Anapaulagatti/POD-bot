@@ -150,6 +150,12 @@ def test_pollinations_image_post_uses_only_one_bounded_api_call(monkeypatch):
         requests.append((url, body, headers, timeout))
         return {"data": [{"b64_json": encoded}]}
     monkeypatch.setattr(provider_catalog, "_call", fake_call)
+    monkeypatch.setattr(
+        provider_catalog, "refresh_public_catalog",
+        lambda **kwargs: free_api_radar.CatalogSnapshot(
+            free_api_radar.parse_image_offers(OFFERS), 100
+        ),
+    )
     image = provider_catalog.PollinationsImage(
         "tongyi-mai/z-image-turbo", "sk_test-only"
     ).generate("an original mountain badge")
@@ -169,8 +175,37 @@ def test_pollinations_unknown_image_format_never_retries(monkeypatch):
         calls.append(1)
         return {"data": [{"url": "https://untrusted.test/img.png"}]}
     monkeypatch.setattr(provider_catalog, "_call", wrong_response)
+    monkeypatch.setattr(
+        provider_catalog, "refresh_public_catalog",
+        lambda **kwargs: free_api_radar.CatalogSnapshot(
+            free_api_radar.parse_image_offers(OFFERS), 100
+        ),
+    )
     with pytest.raises(RuntimeError, match="no retry"):
         provider_catalog.PollinationsImage(
             "tongyi-mai/z-image-turbo", "sk_test-only"
         ).generate("plant")
     assert calls == [1]
+
+
+def test_catalog_turns_paid_only_before_generation_no_api_attempt(monkeypatch):
+    requests = []
+    changed = [
+        {"id": "tongyi-mai/z-image-turbo", "paid_only": True,
+         "output_modalities": ["image"]}
+    ]
+    monkeypatch.setattr(
+        provider_catalog, "refresh_public_catalog",
+        lambda **kwargs: free_api_radar.CatalogSnapshot(
+            free_api_radar.parse_image_offers(changed), 100
+        ),
+    )
+    monkeypatch.setattr(provider_catalog, "_call",
+                        lambda *args, **kwargs: requests.append(1))
+    wrapped = provider_catalog.MeteredImageProvider(
+        provider_catalog.PollinationsImage("tongyi-mai/z-image-turbo", "sk_valid"),
+        "pollinations", "pollinations:test",
+    )
+    with pytest.raises(PermissionError, match="no longer Quest-eligible"):
+        wrapped.generate("badger illustration")
+    assert not requests
