@@ -109,10 +109,18 @@ class StudioActions:
             if not chosen:
                 return
             esrgan = Path(chosen)
+        previous = [
+            f"{platform}: {state}"
+            for platform, state in entry.get("platform_status", {}).items()
+            if state in ("approved", "uploaded")
+        ]
+        details = ", ".join(previous) if previous else "Chưa có duyệt đang hoạt động"
         if not messagebox.askyesno(
-            "Tạo lại file in",
-            "Sẽ lưu một file mới và hủy phê duyệt đăng bán trước đó. "
-            "Sau khi xử lý, bạn cần kiểm tra file PNG và mockup. Tiếp tục?",
+            "Xác nhận hủy trạng thái duyệt",
+            f"Trạng thái hiện tại: {details}.\n"
+            "Tạo lại file in sẽ chuyển cả Redbubble và TeePublic về DRAFT, "
+            "kể cả khi đã ghi nhận UPLOADED. Việc xếp hàng có thể chạy sau.\n"
+            "Hãy kiểm tra lại file in và duyệt lại trước khi bán. Đồng ý?",
         ):
             return
         options = ProcessOptions(
