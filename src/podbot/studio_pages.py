@@ -296,8 +296,8 @@ class StudioPages:
         page = self.pages["trends"]
         self._section(
             page, "Khám phá xu hướng",
-            "Đọc Google Trends RSS trực tiếp. Xu hướng tìm kiếm không đồng nghĩa "
-            "với quyền sử dụng thương hiệu hoặc cơ hội bán hàng được đảm bảo.",
+            "Đọc chủ đề + gợi ý từ khóa từ Google Trends RSS/tin liên quan. "
+            "Từ khóa không phải Google Related Queries; kiểm tra thương hiệu trước khi dùng.",
         )
         card = self._card(page)
         card.pack(fill="x", padx=8, pady=(0, 12))
@@ -315,7 +315,7 @@ class StudioPages:
         self.trend_button.pack(side="left", padx=13)
         results = self._card(page)
         results.pack(fill="x", padx=8, pady=(0, 16))
-        self._label(results, "Chủ đề đang được tìm kiếm", 17, bold=True).pack(
+        self._label(results, "Chủ đề và từ khóa gợi ý từ RSS", 17, bold=True).pack(
             anchor="w", padx=20, pady=(18, 10),
         )
         self.trend_rows = ctk.CTkScrollableFrame(
