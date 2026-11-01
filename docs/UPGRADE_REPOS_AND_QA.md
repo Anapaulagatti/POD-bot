@@ -25,3 +25,13 @@
 - Validate an optional `rapidocr` backend with real packaging measurements, including signed DLLs/model licenses and performance before including it in standard EXE.
 - For verified Related Queries, separately test `trendspyg` Explore in a Chrome-enabled environment with strict rate limits, timeouts and timestamped cache. Do not pretend RSS contains those values.
 - Never automatically greenlight selling designs containing recognized brand names, celebrities or other protected material.
+
+## Follow-up: SHA-256 OCR caching and dynamic API model discovery
+
+- OCR text now caches inside each design manifest with its print-file SHA-256. Approval, upload confirmation and CSV export reuse the transcript until image bytes change. Reprocessing clears the cache. Blocklist changes are still checked on every approval. Failed OCR attempts are never negative-cached.
+- Trends keyword suggestions reject phrases with function words at either end. Trends with blocklist matches are visibly warned and their auto-prefill is disabled.
+- Settings offers a read-only key check and model listing per selected provider. No generation call, billing, image prompts or automatic retry happens during a key check.
+- OpenAI: GET /v1/models. Gemini: GET /v1beta/models, up to three pages. Replicate: first page of the public model catalog. Cloudflare: Workers AI model listing. Hugging Face and Stability: identity check only. fal: credential-specific nonbillable discovery not configured, clearly marked unverified.
+- Only detected image models with an adapter-compatible request contract are offered to the generator. Others remain listed-only. Users can opt into a manual preset list with a warning.
+- A successful key listing does not establish credits, quota, image-generation entitlement, transparency or supported parameters. A billable live probe still requires separate explicit consent.
+- API keys are sent in headers over HTTPS, never in URLs, logs, manifests or saved discovered-model records. Session-only matching invalidates a model choice when its key is changed.
