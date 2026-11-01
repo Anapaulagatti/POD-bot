@@ -15,8 +15,11 @@ Phiên bản kỹ thuật `1.0.0rc3` (1.0 Preview 3). Đây là bản thử nghi
 ## Kiểm tra mới và hàng đợi offline
 
 - Mở **Thư viện thiết kế → Hàng đợi** để xem, thử lại (nếu còn lượt) hoặc hủy tác vụ đang chờ. Khôi phục tác vụ offline bị ngắt sau khi khởi động lại; tác vụ có phí vẫn cần xác nhận riêng và không tự phát lại.
-- **Kiểm tra ảnh** bao gồm phát hiện viền sáng, QC và OCR offline nếu đã cài Tesseract. OCR không thay thế việc duyệt chữ/nhãn hiệu thủ công.
+- **Kiểm tra ảnh** quét chữ trên nền trắng và đen (khi PNG có alpha). OCR được nối vào bước duyệt bán: từ/cụm từ khớp blocklist làm **FAIL**, chữ xuất hiện khi prompt ghi `no text` tạo **WARN**. Nếu OCR chưa cài, ứng dụng cảnh báo và bạn phải tự rà soát chữ, không được hiểu là đã kiểm chứng.
 - Cài Tesseract riêng và đặt `PODBOT_TESSERACT_PATH` nếu không có trong PATH. Không tải model OCR tự động.
+- **Khám phá xu hướng** cho xem chủ đề, từ khóa gợi ý từ Google Trends RSS và tiêu đề tin liên quan; có thể sao chép hoặc dùng để điền form tạo thiết kế sau khi xác nhận. Các từ khóa này KHÔNG phải Google Related Queries được đo riêng.
+- Khi xử lý lại một thiết kế từng được duyệt/đăng, giao diện cảnh báo rằng trạng thái sàn sẽ trở về `draft`.
+- [Nguồn GitHub/skill đề xuất để nâng cấp](docs/UPGRADE_REPOS_AND_QA.md).
 - Tham khảo [hướng dẫn chất lượng và hàng đợi](docs/QUALITY_AND_OFFLINE_JOBS.md).
 
 ## Những điểm kỹ thuật hiện có
