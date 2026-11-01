@@ -14,7 +14,7 @@ import urllib.request
 from dataclasses import dataclass
 
 MAX_DISCOVERY_JSON = 1024 * 1024
-MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:-]{1,150}\Z")
+MODEL_ID = re.compile(r"@?[A-Za-z0-9][A-Za-z0-9_./:-]{1,150}\Z")
 PROVIDER_KEYS = {
     "openai": "OPENAI_API_KEY",
     "gemini": "GEMINI_API_KEY",
