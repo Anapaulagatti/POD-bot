@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 
 from podbot import free_api_radar, model_discovery, provider_catalog
-from podbot.auth_transport import NoCredentialRedirect, open_authenticated
+from podbot.auth_transport import NoCredentialRedirect
 
 
 OFFERS = [
@@ -181,7 +181,7 @@ def test_pollinations_unknown_image_format_never_retries(monkeypatch):
             free_api_radar.parse_image_offers(OFFERS), 100
         ),
     )
-    with pytest.raises(RuntimeError, match="no retry"):
+    with pytest.raises(TypeError, match="no retry"):
         provider_catalog.PollinationsImage(
             "tongyi-mai/z-image-turbo", "sk_test-only"
         ).generate("plant")
