@@ -17,7 +17,7 @@ COMMON_WORDS = {
     "from", "have", "will", "are", "was", "the", "for", "and", "now", "how",
     "why", "who", "more", "your", "its", "into", "after", "before", "says",
     "a", "an", "to", "of", "in", "on", "at", "by", "as", "or", "is", "be",
-    "up", "out", "off", "than", "over", "under", "via", "per", "not", "new",
+    "up", "out", "off", "than", "over", "under", "via", "per", "not",
 }
 
 
