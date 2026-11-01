@@ -22,18 +22,32 @@ from podbot.audit import find_blocked_terms, get_blocklist, make_color_preview
 from podbot.credential_vault import erase_credentials, remember_credentials, restore_credentials
 from podbot.importer import import_design
 from podbot.job_queue import JobQueue
-from podbot.offline_tasks import execute_next
 from podbot.mockups import create_shirt_mockup
+from podbot.offline_tasks import execute_next
 from podbot.pipeline import create_draft
 from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
 from podbot.storage import list_designs
-from podbot.trends import read_trends
 from podbot.studio_actions import StudioActions
 from podbot.studio_theme import (
-    BG, SIDEBAR, CARD, CARD_ALT, BORDER, ACCENT, ACCENT_HOVER, ACCENT_TEXT,
-    WHITE, MUTED, DANGER, WARNING, N_FONT, PLATFORMS, UPLOADER,
-    MENU, TEXT, STATUSES,
+    ACCENT,
+    ACCENT_HOVER,
+    ACCENT_TEXT,
+    BG,
+    BORDER,
+    CARD,
+    CARD_ALT,
+    MENU,
+    MUTED,
+    N_FONT,
+    PLATFORMS,
+    SIDEBAR,
+    STATUSES,
+    TEXT,
+    UPLOADER,
+    WARNING,
+    WHITE,
 )
+from podbot.trends import read_trends
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
