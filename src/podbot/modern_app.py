@@ -21,6 +21,8 @@ from podbot.api_limits import get_daily_limit, set_daily_limit
 from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
 from podbot.credential_vault import erase_credentials, remember_credentials, restore_credentials
 from podbot.importer import import_design
+from podbot.job_queue import JobQueue
+from podbot.offline_tasks import execute_next
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
 from podbot.processing import (
@@ -33,57 +35,15 @@ from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark
 from podbot.settings import data_directory
 from podbot.storage import export_csv, list_designs, update_seo
 from podbot.trends import read_trends
+from podbot.studio_theme import (
+    BG, SIDEBAR, CARD, CARD_ALT, BORDER, ACCENT, ACCENT_HOVER, ACCENT_TEXT,
+    WHITE, MUTED, DANGER, WARNING, N_FONT, PLATFORMS, UPLOADER,
+    MENU, TEXT, STATUSES,
+)
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-BG = "#0B1220"
-SIDEBAR = "#101B2B"
-CARD = "#152438"
-CARD_ALT = "#1D3047"
-BORDER = "#263C54"
-ACCENT = "#30DBC2"
-ACCENT_HOVER = "#1DBEA8"
-ACCENT_TEXT = "#082923"
-WHITE = "#F1F7FC"
-MUTED = "#9DB0C2"
-DANGER = "#FB7185"
-WARNING = "#F5BD67"
-N_FONT = "Segoe UI"
-
-PLATFORMS = {"redbubble": "Redbubble", "teepublic": "TeePublic"}
-UPLOADER = {
-    "redbubble": "https://www.redbubble.com/portfolio/images/new",
-    "teepublic": "https://www.teepublic.com/",
-}
-
-MENU = (
-    ("overview", "⌂  Tổng quan"),
-    ("create", "✦  Sáng tạo AI"),
-    ("library", "▦  Thư viện thiết kế"),
-    ("trends", "◈  Xu hướng"),
-    ("settings", "⚙  Cài đặt API"),
-)
-
-TEXT = {
-    "app": "PODBot Studio",
-    "language": "Tiếng Việt",
-    "ready": "Sẵn sàng. Các thiết kế phải được duyệt trước khi đăng bán.",
-    "create": "Tạo thiết kế",
-    "import": "Nhập ảnh từ máy (không tốn phí AI)",
-    "rights": "Tôi xác nhận có quyền thương mại với hình ảnh và nội dung sản phẩm.",
-    "paid": "Lệnh tạo ảnh hoặc SEO này có thể bị tính phí API. Tiếp tục?",
-    "status_draft": "Bản nháp",
-    "status_approved": "Đã duyệt",
-    "status_uploaded": "Đã đăng",
-    "empty": "Chưa có thiết kế. Hãy tạo bằng AI hoặc nhập ảnh từ máy.",
-    "no_selection": "Vui lòng chọn một thiết kế trong thư viện.",
-}
-STATUSES = {
-    "draft": TEXT["status_draft"],
-    "approved": TEXT["status_approved"],
-    "uploaded": TEXT["status_uploaded"],
-}
 
 
 def model_options() -> list[str]:
@@ -104,6 +64,8 @@ class PODBotDesktop(ctk.CTk):
         self.minsize(940, 660)
         self.configure(fg_color=BG)
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
+        self.offline_jobs = JobQueue()
+        self.offline_jobs.recover()
         self.busy = False
         self.records: dict[str, dict] = {}
         self.selected_id: str | None = None
@@ -452,6 +414,9 @@ class PODBotDesktop(ctk.CTk):
         row = ctk.CTkFrame(control, fg_color="transparent")
         row.pack(fill="x", padx=15, pady=13)
         self._button(row, "↻  Làm mới", self.refresh, width=116).pack(side="left")
+        self._button(row, "◷  Hàng đợi", self.show_jobs, width=126).pack(
+            side="left", padx=(9, 0)
+        )
         self._label(row, "NỀN TẢNG", 10, fg=MUTED, bold=True).pack(
             side="left", padx=(20, 10),
         )
@@ -819,6 +784,8 @@ class PODBotDesktop(ctk.CTk):
                     continue
                 if kind == "ok":
                     self.message.set("✓  Đã hoàn tất. Dữ liệu được lưu trên máy.")
+                    if isinstance(result, dict) and "_job_inspection" in result:
+                        messagebox.showinfo("Kiểm tra ảnh + OCR", result["_job_inspection"])
                     self.refresh()
                     if isinstance(result, dict) and "id" in result:
                         self.selected_id = result["id"]
@@ -831,6 +798,7 @@ class PODBotDesktop(ctk.CTk):
         except queue.Empty:
             pass
         self.after(120, self._handle_events)
+        self._drain_offline_jobs()
 
     def generate(self) -> None:
         prompt = self.prompt_box.get("1.0", "end").strip()
@@ -923,25 +891,51 @@ class PODBotDesktop(ctk.CTk):
     def preflight(self) -> None:
         if not (entry := self._selected()):
             return
-        platform = self.platform.get()
+        self.offline_jobs.enqueue(
+            "inspect", {"design_id": entry["id"], "platform": self.platform.get()}
+        )
+        self.message.set("Đã thêm kiểm tra ảnh + OCR vào hàng đợi.")
+        self._drain_offline_jobs()
 
-        def inspect():
-            with Image.open(entry["print_file"]) as original:
-                checks = audit_image(original, platform)
-            lines = [
-                f"{x.level.upper()} · {x.name} · {x.message}"
-                for x in checks
-            ]
-            return "\n".join(lines)
+    def _drain_offline_jobs(self) -> None:
+        if self.busy or not any(job.status == "pending" for job in self.offline_jobs.list()):
+            return
+        self._run("Đang xử lý hàng đợi offline...", execute_next, self.offline_jobs)
 
-        # The quality scan can be expensive on a 5000x5500 PNG.
-        self._run("Đang kiểm tra thông số ảnh in...",
-                  self._show_quality, inspect)
-
-    def _show_quality(self, inspect) -> dict:
-        report = inspect()
-        self.events.put(("quality", report))
-        return {}
+    def show_jobs(self) -> None:
+        jobs = self.offline_jobs.list()
+        if not jobs:
+            messagebox.showinfo("Hàng đợi tác vụ", "Chưa có tác vụ offline.")
+            return
+        popup = ctk.CTkToplevel(self)
+        popup.title("Hàng đợi offline")
+        popup.geometry("550x250")
+        popup.transient(self)
+        popup.grab_set()
+        choices = {
+            f"{job.id[:10]} · {job.kind} · {job.status} · {job.attempts}/{job.max_attempts}": job.id
+            for job in jobs
+        }
+        selected = tk.StringVar(value=next(iter(choices)))
+        self._label(popup, "Chọn tác vụ · Tạo ảnh AI không nằm trong hàng đợi này",
+                    13, fg=MUTED).pack(padx=16, pady=(20, 12))
+        ctk.CTkOptionMenu(popup, values=list(choices), variable=selected,
+                          width=490).pack(padx=16)
+        def change(action: str) -> None:
+            job_id = choices[selected.get()]
+            changed = (
+                self.offline_jobs.retry(job_id) if action == "retry"
+                else self.offline_jobs.cancel(job_id)
+            )
+            messagebox.showinfo("Hàng đợi", "Đã cập nhật." if changed else
+                                "Không thể thay đổi tác vụ đang chạy/đã hoàn tất.",
+                                parent=popup)
+            popup.destroy()
+            self._drain_offline_jobs()
+        buttons = ctk.CTkFrame(popup, fg_color="transparent")
+        buttons.pack(pady=22)
+        self._button(buttons, "Thử lại", lambda: change("retry")).pack(side="left", padx=7)
+        self._button(buttons, "Hủy chờ", lambda: change("cancel")).pack(side="left", padx=7)
 
     def preview_colors(self) -> None:
         if not (entry := self._selected()):
@@ -1069,6 +1063,13 @@ class PODBotDesktop(ctk.CTk):
             flat_background=flat, remove_background=remove,
             rembg_binary=rembg, upscale=upscale, esrgan_binary=esrgan,
         )
+        if not remove and not upscale:
+            self.offline_jobs.enqueue(
+                "reprocess", {"design_id": entry["id"], "flat_background": flat}
+            )
+            self.message.set("Đã thêm tác vụ xử lý ảnh vào hàng đợi an toàn.")
+            self._drain_offline_jobs()
+            return
         self._run(
             "Đang cắt nền / tạo lại file in...",
             process_stored_design, entry["id"], options,
