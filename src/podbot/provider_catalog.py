@@ -80,6 +80,13 @@ CATALOG = (
     ModelSpec("stability-ultra", "Stability AI · Stable Image Ultra (paid)", "stability",
               "ultra", "STABILITY_API_KEY", True, "Premium credit-billed text-to-image."),
 )
+# Only these audited Gemini model contracts may receive imageConfig/imageSize.
+# A newly listed generateContent model is not evidence that it accepts these options.
+GEMINI_IMAGE_SIZE_MODELS = frozenset({
+    "gemini-3.1-flash-lite-image", "gemini-3.1-flash-image",
+    "gemini-3-pro-image", "gemini-nano-banana-2.1",
+})
+
 MODELS = {item.id: item for item in CATALOG}
 LABELS = {item.label: item.id for item in CATALOG}
 _DISCOVERED: dict[str, ModelSpec] = {}
@@ -91,7 +98,9 @@ def set_discovered_models(vendor: str, discovered) -> list[ModelSpec]:
         if value.vendor == vendor:
             LABELS.pop(value.label, None)
             _DISCOVERED.pop(key, None)
-    results = []
+    results: list[ModelSpec] = []
+    known = {(spec.vendor, spec.model): spec for spec in CATALOG}
+    seen: set[tuple[str, str]] = set()
     keys = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY",
             "cloudflare": "CLOUDFLARE_API_TOKEN", "replicate": "REPLICATE_API_TOKEN"}
     if vendor not in keys:
@@ -113,6 +122,15 @@ def set_discovered_models(vendor: str, discovered) -> list[ModelSpec]:
         }:
             continue
         if vendor == "cloudflare" and model != "@cf/black-forest-labs/flux-1-schnell":
+            continue
+        identity = (vendor, model)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if identity in known:
+            # The known preset retains its existing label and request schema.
+            # It is returned as a listed model, but never registered twice.
+            results.append(known[identity])
             continue
         identifier = f"discovered:{vendor}:{model}"
         label = f"{vendor.upper()} · {model} (đã liệt kê, chưa test tạo ảnh)"
@@ -217,17 +235,29 @@ class GeminiImage:
             raise ValueError("Invalid Gemini image size.")
         if self.model.endswith("flash-lite-image") and self.size != "1K":
             raise ValueError("Gemini Flash Lite supports 1K output.")
+        config = {"responseModalities": ["IMAGE"]}
+        if self.model in GEMINI_IMAGE_SIZE_MODELS:
+            config["imageConfig"] = {"aspectRatio": "4:5", "imageSize": self.size}
+        # Unknown models receive the smallest documented request contract.
+        # Do not guess optional imageConfig fields or retry a possibly billable request.
         body = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseModalities": ["IMAGE"],
-                "imageConfig": {"aspectRatio": "4:5", "imageSize": self.size},
-            },
+            "generationConfig": config,
         }
-        result = _call(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
-            body, {"x-goog-api-key": self.key},
-        )
+        try:
+            result = _call(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                body, {"x-goog-api-key": self.key},
+            )
+        except RuntimeError as exc:
+            if "HTTP 400" in str(exc):
+                raise RuntimeError(
+                    f"Gemini rejected model {self.model} or its image-generation parameters "
+                    "(HTTP 400). An API attempt has been counted toward the daily safety "
+                    "limit; no paid retry or fallback was made. Verify the model's "
+                    "generateContent support and account access."
+                ) from None
+            raise
         for candidate in result.get("candidates", []):
             for part in candidate.get("content", {}).get("parts", []):
                 inline = part.get("inlineData") or part.get("inline_data") or {}
