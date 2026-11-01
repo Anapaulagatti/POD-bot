@@ -13,6 +13,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
+from podbot.free_api_radar import refresh_public_catalog, verify_quest_only_key
+
 MAX_DISCOVERY_JSON = 1024 * 1024
 MODEL_ID = re.compile(r"@?[A-Za-z0-9][A-Za-z0-9_./:-]{1,150}\Z")
 PROVIDER_KEYS = {
@@ -23,6 +25,7 @@ PROVIDER_KEYS = {
     "huggingface": "HF_TOKEN",
     "stability": "STABILITY_API_KEY",
     "fal": "FAL_KEY",
+    "pollinations": "POLLINATIONS_API_KEY",
 }
 
 
@@ -165,6 +168,18 @@ def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResu
         if data.get("success") is not True or not isinstance(data.get("result"), list):
             raise RuntimeError("Cloudflare model listing was rejected.")
         models = _clean_models(data["result"], provider)
+    elif provider == "pollinations":
+        # Pollinations uses an API key, even when the model can spend free
+        # Quest credits. A read-only account-key endpoint verifies only the key.
+        verify_quest_only_key(key)
+        snapshot = refresh_public_catalog()
+        models = tuple(
+            DiscoveredModel(
+                offer.model_id, offer.name, offer.image_adapter,
+                offer.warning,
+            )
+            for offer in snapshot.offers
+        )
     elif provider == "huggingface":
         data = _get_json("https://huggingface.co/api/whoami-v2",
                          {"Authorization": f"Bearer {key}"})
@@ -183,4 +198,9 @@ def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResu
         f"{compatible} image-model candidates supported by current adapter. "
         "A successful listing does NOT confirm credits, image generation, or transparency."
     )
+    if provider == "pollinations":
+        message += (
+            " Quest eligible models MAY SPEND Pollen credits; not guaranteed free. "
+            "Set a zero-paid budget on your key in the provider dashboard."
+        )
     return DiscoveryResult(provider, True, models, message)

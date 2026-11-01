@@ -22,6 +22,7 @@ from PIL import Image
 
 from podbot.api_limits import reserve_paid_request
 from podbot.auth_transport import open_authenticated
+from podbot.free_api_radar import refresh_public_catalog, verify_quest_only_key
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
@@ -108,20 +109,23 @@ def set_discovered_models(vendor: str, discovered) -> list[ModelSpec]:
     known = {(spec.vendor, spec.model): spec for spec in CATALOG}
     seen: set[tuple[str, str]] = set()
     keys = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY",
-            "cloudflare": "CLOUDFLARE_API_TOKEN", "replicate": "REPLICATE_API_TOKEN"}
+            "cloudflare": "CLOUDFLARE_API_TOKEN", "replicate": "REPLICATE_API_TOKEN",
+            "pollinations": "POLLINATIONS_API_KEY"}
     if vendor not in keys:
         return []
     for item in discovered:
         if not item.compatible:
             continue
         model = item.id
-        if not re.fullmatch(r"@?[A-Za-z0-9][A-Za-z0-9_./-]{1,130}", model):
+        if not re.fullmatch(r"@?[A-Za-z0-9][A-Za-z0-9_./:-]{1,130}", model):
             continue
         if vendor == "openai" and not model.startswith("gpt-image-"):
             continue
         if vendor == "gemini" and not (
             "image" in model.casefold() or "banana" in model.casefold()
         ):
+            continue
+        if vendor == "pollinations" and "/" not in model:
             continue
         if vendor == "replicate" and model not in {
             "black-forest-labs/flux-schnell", "black-forest-labs/flux-dev"
@@ -139,10 +143,17 @@ def set_discovered_models(vendor: str, discovered) -> list[ModelSpec]:
             results.append(known[identity])
             continue
         identifier = f"discovered:{vendor}:{model}"
-        label = f"{vendor.upper()} · {model} (đã liệt kê, chưa test tạo ảnh)"
+        label = (
+            f"Pollinations · {model} (Quest credits, có thể tính phí)"
+            if vendor == "pollinations" else
+            f"{vendor.upper()} · {model} (đã liệt kê, chưa test tạo ảnh)"
+        )
         spec = ModelSpec(
             identifier, label, vendor, model, keys[vendor], True,
-            "Từ API models.list; chỉ xác minh được danh sách, chưa xác nhận tạo ảnh/giá.",
+            ("Model công khai cho phép Quest Pollen; KHÔNG phải $0. "
+             "Key, số dư, quyền thương mại và model thực tế chưa được test."
+             if vendor == "pollinations" else
+             "Từ API models.list; chỉ xác minh được danh sách, chưa xác nhận tạo ảnh/giá."),
         )
         _DISCOVERED[identifier] = spec
         LABELS[label] = identifier
@@ -307,6 +318,50 @@ class OpenAIImage:
 
 
 @dataclass
+class PollinationsImage:
+    """User-funded, opt-in hosted image API. NEVER called by catalog refresh."""
+
+    model: str
+    key: str
+    name: str = "pollinations-image"
+
+    def validate_request(self) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./:-]{2,130}", self.model):
+            raise ValueError("Invalid Pollinations image model ID.")
+        if "/" not in self.model:
+            raise ValueError("Pollinations requires a canonical publisher/model ID.")
+        verify_quest_only_key(self.key)
+        # Recheck advertised free-credit eligibility immediately before a
+        # potentially billed request. Metadata may change during the 6h UI
+        # catalog cache. This GET never sends a key or reserves daily quota.
+        offers = refresh_public_catalog(force=True).offers
+        if not any(
+            offer.model_id == self.model and offer.image_adapter
+            and offer.access == "quest-eligible" for offer in offers
+        ):
+            raise PermissionError(
+                "Pollinations model is no longer Quest-eligible or its image "
+                "contract is unverified. No generation request was sent."
+            )
+
+    def generate(self, prompt: str) -> Image.Image:
+        self.validate_request()
+        result = _call(
+            "https://gen.pollinations.ai/v1/images/generations",
+            {"model": self.model, "prompt": prompt, "n": 1,
+             "response_format": "b64_json"},
+            {"Authorization": f"Bearer {self.key}"}, timeout=120,
+        )
+        images = result.get("data")
+        if not isinstance(images, list) or not images or not isinstance(images[0], dict):
+            raise RuntimeError("Pollinations did not return image data (no paid retry).")
+        encoded = images[0].get("b64_json")
+        if not isinstance(encoded, str):
+            raise TypeError("Pollinations image output format not supported; no retry.")
+        return _decode(encoded)
+
+
+@dataclass
 class ReplicateImage:
     model: str
     key: str
@@ -461,6 +516,8 @@ def make_provider(
         provider = FalImage(spec.model, key)
     elif spec.vendor == "stability":
         provider = StabilityImage(spec.model, key)
+    elif spec.vendor == "pollinations":
+        provider = PollinationsImage(spec.model, key)
     else:
         raise ValueError("No adapter available for this model.")
     if not key:
