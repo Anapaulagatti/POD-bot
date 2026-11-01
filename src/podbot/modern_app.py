@@ -22,7 +22,12 @@ from PIL import Image
 from podbot.api_limits import get_daily_limit, set_daily_limit
 from podbot.audit import find_blocked_terms, get_blocklist, make_color_preview
 from podbot.credential_vault import erase_credentials, remember_credentials, restore_credentials
-from podbot.free_api_radar import REFRESH_SECONDS, CatalogSnapshot, refresh_public_catalog
+from podbot.free_api_radar import (
+    AUTO_REFRESH_DEFAULT,
+    REFRESH_SECONDS,
+    CatalogSnapshot,
+    refresh_public_catalog,
+)
 from podbot.importer import import_design
 from podbot.job_queue import JobQueue
 from podbot.mockups import create_shirt_mockup
@@ -82,7 +87,7 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
 
         self.model = tk.StringVar(value="Hãy kiểm tra API key trong Cài đặt")
         self.api_discovery_vendor = tk.StringVar(value="openai")
-        self.free_catalog_autoupdate = tk.BooleanVar(value=False)
+        self.free_catalog_autoupdate = tk.BooleanVar(value=AUTO_REFRESH_DEFAULT)
         self.free_catalog_last_check = 0.0
         self.verified_provider_keys: dict[str, str] = {}
         self.verified_model_choices: dict[str, set[str]] = {}
