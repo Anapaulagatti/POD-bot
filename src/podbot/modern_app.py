@@ -80,6 +80,7 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self.model = tk.StringVar(value="Hãy kiểm tra API key trong Cài đặt")
         self.api_discovery_vendor = tk.StringVar(value="openai")
         self.verified_provider_keys: dict[str, str] = {}
+        self.verified_model_choices: dict[str, set[str]] = {}
         self.manual_models_enabled = False
         self.seo = tk.StringVar(value="SEO offline (miễn phí)")
         self.resolution = tk.StringVar(value="2K")
@@ -438,6 +439,14 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
 
         self._run("Đang xác minh key và lấy danh sách model (chỉ đọc)...", work)
 
+    def _verified_model_labels(self) -> list[str]:
+        current = {name: field.get() for name, field in self.keys.items()}
+        selections: set[str] = set()
+        for provider, fingerprint in self.verified_provider_keys.items():
+            if fingerprint == self._credential_fingerprint(provider, current):
+                selections.update(self.verified_model_choices.get(provider, set()))
+        return [label for label, model_id in LABELS.items() if model_id in selections]
+
     def _apply_discovery(self, payload: dict) -> None:
         result = payload["_model_discovery"]
         current = {key: field.get() for key, field in self.keys.items()}
@@ -451,18 +460,23 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         else:
             self.verified_provider_keys.pop(result.provider, None)
         found = set_discovered_models(result.provider, result.models)
-        self.model_scan_status.configure(
-            text=result.message
-            + (f"\nĐã thêm {len(found)} model ảnh tương thích vào danh sách tạo."
-               if found else "\nChưa tìm thấy model ảnh có adapter tương thích.")
+        self.verified_model_choices[result.provider] = (
+            {spec.id for spec in found} if result.verified else set()
         )
-        values = [
-            label for label in LABELS
-            if LABELS[label].startswith("discovered:") and get_spec(LABELS[label]).vendor
-            in self.verified_provider_keys
-        ]
+        message = result.message
+        if found:
+            message += f"\n{len(found)} model tương thích được liệt kê, không thêm mục trùng."
+        else:
+            message += "\nKhông thấy model phù hợp trong trang đã kiểm tra."
+        if result.provider in ("replicate", "cloudflare"):
+            message += (
+                "\nDanh sách API có thể chưa đầy đủ. Preset vẫn có thể chọn "
+                "trong chế độ thủ công, nhưng chưa xác minh quyền sử dụng."
+            )
+        self.model_scan_status.configure(text=message)
+        values = self._verified_model_labels()
         if self.manual_models_enabled:
-            values.extend(model_options())
+            values = list(dict.fromkeys([*values, *model_options()]))
         if not values:
             values = ["Hãy kiểm tra API key trong Cài đặt"]
         self.model_dropdown.configure(values=values)
@@ -479,11 +493,7 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         ):
             return
         self.manual_models_enabled = True
-        choices = [
-            label for label, ident in LABELS.items()
-            if ident.startswith("discovered:") and get_spec(ident).vendor
-            in self.verified_provider_keys
-        ] + model_options()
+        choices = list(dict.fromkeys([*self._verified_model_labels(), *model_options()]))
         self.model_dropdown.configure(values=choices)
         self.model.set(choices[0])
         self._model_changed(self.model.get())
@@ -505,13 +515,15 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             messagebox.showerror("Model chưa hỗ trợ", "Vui lòng chọn model trong danh sách.")
             return
         spec = get_spec(model_id)
-        if model_id.startswith("discovered:"):
+        confirmed_from_listing = model_id in self.verified_model_choices.get(
+            spec.vendor, set()
+        )
+        if confirmed_from_listing or model_id.startswith("discovered:"):
             current = {name: field.get() for name, field in self.keys.items()}
-            if self.verified_provider_keys.get(spec.vendor) != self._credential_fingerprint(
-                spec.vendor, current
-            ):
+            if (not confirmed_from_listing or self.verified_provider_keys.get(spec.vendor)
+                    != self._credential_fingerprint(spec.vendor, current)):
                 messagebox.showwarning(
-                    "API key đã đổi", "Hãy xác minh lại key để cập nhật model khả dụng."
+                    "API key đã đổi", "Hãy kiểm tra lại key để cập nhật model khả dụng."
                 )
                 return
         elif not self.manual_models_enabled:
