@@ -21,6 +21,7 @@ from typing import Any
 from PIL import Image
 
 from podbot.api_limits import reserve_paid_request
+from podbot.auth_transport import open_authenticated
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
@@ -177,11 +178,11 @@ def _call(url: str, body: dict | None, headers: dict[str, str],
         headers={"Content-Type": "application/json", **headers},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with open_authenticated(request, timeout=timeout) as response:
             raw = response.read(MAX_JSON_BYTES + 1)
     except urllib.error.HTTPError as exc:
         # Do not echo upstream bodies: they can contain prompts or account data.
-        raise RuntimeError(f"Provider HTTP {exc.code}. Check key, credits, model and quota.") from exc
+        raise RuntimeError(f"Provider HTTP {exc.code}. Check key, credits, model and quota.") from None
     except (urllib.error.URLError, TimeoutError) as exc:
         raise RuntimeError("Image provider network request failed.") from exc
     if len(raw) > MAX_JSON_BYTES:
@@ -392,10 +393,10 @@ class StabilityImage:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
+            with open_authenticated(request, timeout=180) as response:
                 raw = response.read(MAX_IMAGE_BYTES + 1)
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Stability HTTP {exc.code}. Verify credits/parameters.") from exc
+            raise RuntimeError(f"Stability HTTP {exc.code}. Verify credits/parameters.") from None
         except (urllib.error.URLError, TimeoutError) as exc:
             raise RuntimeError("Stability connection failed.") from exc
         return _check_image(raw)
