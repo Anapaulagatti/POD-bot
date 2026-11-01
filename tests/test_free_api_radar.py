@@ -262,13 +262,10 @@ def test_catalog_requires_exact_image_endpoint_and_image_modality():
     assert [o.model_id for o in selected if o.image_adapter] == ["a/compatible"]
 
 
-def test_default_auto_catalog_refresh_is_off():
-    from pathlib import Path
-
-    from podbot import modern_app
-
-    source = Path(modern_app.__file__).read_text(encoding="utf-8")
-    assert "self.free_catalog_autoupdate = tk.BooleanVar(value=False)" in source
+def test_default_auto_catalog_refresh_is_off_without_gui():
+    # The production GUI reads the same constant when creating BooleanVar.
+    # This test works on headless Linux without tkinter or customtkinter.
+    assert free_api_radar.AUTO_REFRESH_DEFAULT is False
 
 
 def test_preflight_blocks_paid_wallet_access_before_reserving(monkeypatch):
