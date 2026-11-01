@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PIL import Image
 
 from podbot.audit import audit_image, get_blocklist
-from podbot.image_review import inspect_halo, review_ocr, scan_ocr
+from podbot.image_review import inspect_halo, review_ocr
+from podbot.ocr_cache import cached_image_ocr
 from podbot.job_queue import JobQueue
 from podbot.processing import ProcessOptions, process_stored_design
-from podbot.storage import list_designs
+from podbot.storage import list_designs, save_manifest
 
 
 def execute_next(queue: JobQueue):
@@ -32,7 +35,9 @@ def execute_next(queue: JobQueue):
             with Image.open(entry["print_file"]) as art:
                 checks = audit_image(art, job.payload["platform"])
                 halo = inspect_halo(art)
-                ocr = scan_ocr(art)
+                ocr, changed = cached_image_ocr(entry, art, Path(entry["print_file"]))
+                if changed:
+                    save_manifest(Path(entry["print_file"]).parent, entry)
                 checks.extend(review_ocr(ocr, get_blocklist(), prompt=entry.get("prompt", "")))
             lines = [f"{x.level.upper()} · {x.name} · {x.message}" for x in checks]
             lines.append(
