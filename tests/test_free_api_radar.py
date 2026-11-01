@@ -12,7 +12,6 @@ from PIL import Image
 
 from podbot import auth_transport, free_api_radar, model_discovery, provider_catalog
 
-
 OFFERS = [
     {"id": "tongyi-mai/z-image-turbo", "name": "Z Image Turbo",
      "paid_only": False, "output_modalities": ["image"],
