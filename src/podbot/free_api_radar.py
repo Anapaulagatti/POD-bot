@@ -20,6 +20,8 @@ MAX_CATALOG_BYTES = 2 * 1024 * 1024
 MAX_ACCOUNT_JSON = 64 * 1024
 KEY_ENDPOINT = "https://gen.pollinations.ai/account/key"
 REFRESH_SECONDS = 6 * 60 * 60
+# Local-first default; only the user can opt into periodic catalog network GETs.
+AUTO_REFRESH_DEFAULT = False
 MODEL_ID_PATTERN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_./:-]{2,140}\Z")
 
 
