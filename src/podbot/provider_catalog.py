@@ -22,6 +22,7 @@ from PIL import Image
 
 from podbot.api_limits import reserve_paid_request
 from podbot.auth_transport import open_authenticated
+from podbot.free_api_radar import refresh_public_catalog
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
@@ -331,6 +332,18 @@ class PollinationsImage:
             raise ValueError("Pollinations requires a canonical publisher/model ID.")
         if not self.key.startswith("sk_"):
             raise ValueError("Enter your own scoped Pollinations secret key (sk_).")
+        # Recheck advertised free-credit eligibility immediately before a
+        # potentially billed request. Metadata may change during the 6h UI
+        # catalog cache. This GET never sends a key or reserves daily quota.
+        offers = refresh_public_catalog(force=True).offers
+        if not any(
+            offer.model_id == self.model and offer.image_adapter
+            and offer.access == "quest-eligible" for offer in offers
+        ):
+            raise PermissionError(
+                "Pollinations model is no longer Quest-eligible or its image "
+                "contract is unverified. No generation request was sent."
+            )
 
     def generate(self, prompt: str) -> Image.Image:
         self.validate_request()
