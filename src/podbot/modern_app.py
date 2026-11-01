@@ -48,7 +48,7 @@ from podbot.studio_theme import (
 )
 from podbot.trends import read_trends
 
-__all__ = ["PODBotDesktop", "model_options", "status_label", "STATUSES", "TEXT", "MENU", "ACCENT"]
+__all__ = ["ACCENT", "MENU", "STATUSES", "TEXT", "PODBotDesktop", "model_options", "status_label"]
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
