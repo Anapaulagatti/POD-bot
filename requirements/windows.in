@@ -1,9 +1,12 @@
 # Direct dependencies for the Windows preview release, Python 3.12.
 # Resolve all transitive versions into a lock snapshot ON THE WINDOWS RELEASE RUNNER.
-Pillow>=10.4,<13
+Pillow>=13.0,<14
 customtkinter>=5.2.2,<7
 keyring>=25,<27
 huggingface_hub>=0.34,<2
 pyinstaller>=6,<8
 pytest>=8,<10
 ruff>=0.8
+pip-audit>=2.7,<4
+setuptools>=69,<85
+wheel>=0.44,<1

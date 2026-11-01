@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: windows-build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   test-and-build:
     runs-on: windows-latest
@@ -14,23 +17,51 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install dependencies
-        run: python -m pip install -e ".[hf,dev]"
+          cache: pip
+          cache-dependency-path: requirements/windows-py312.lock.txt
+      - name: Install Windows hash-locked dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip install --require-hashes -r requirements/windows-py312.lock.txt
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+      - name: Lint Python source and tests
+        run: python -m ruff check src tests scripts
       - name: Run unit tests
         run: python -m pytest -q
       - name: Compile Python modules
         run: python -m compileall -q src
-      - name: Lint
-        run: python -m ruff check src tests
+      - name: Audit pinned Windows dependencies
+        run: python -m pip_audit --local
       - name: Build portable folder EXE and archive it
         shell: pwsh
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
           if (!(Test-Path "dist/PODBot/PODBot.exe")) { throw "Missing onedir EXE" }
           Compress-Archive -Path "dist/PODBot" -DestinationPath "dist/PODBot-windows-onedir.zip"
+      - name: Check native Windows onedir execution and GUI startup
+        shell: pwsh
+        run: |
+          $probe = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot\\PODBot.exe") -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($probe.ExitCode -ne 0) { throw "PODBot onedir self-test failed: $($probe.ExitCode)" }
+          $process = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot\\PODBot.exe") -PassThru
+          Start-Sleep -Seconds 4
+          $process.Refresh()
+          if ($process.HasExited) { throw "Windows GUI stopped unexpectedly: $($process.ExitCode)" }
+          Stop-Process -Id $process.Id -Force
       - name: Build single-file EXE
+        if: github.event_name == 'workflow_dispatch'
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
+      - name: Run single-file smoke test
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $probe = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot.exe") -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($probe.ExitCode -ne 0) { throw "Onefile self-test failed: $($probe.ExitCode)" }
       - name: Smoke-check Windows EXE output
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           if (!(Test-Path "dist/PODBot.exe")) { throw "Missing expected EXE" }
@@ -38,6 +69,7 @@ jobs:
           if ($file.Length -lt 1000000) { throw "EXE is unexpectedly small" }
           Write-Host "Built PODBot.exe bytes: $($file.Length)"
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: PODBot-windows-exe
           path: dist/PODBot.exe

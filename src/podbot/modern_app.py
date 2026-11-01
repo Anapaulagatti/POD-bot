@@ -6,6 +6,7 @@ modules. No network calls on the UI thread. Never store API keys or auto-post to
 
 from __future__ import annotations
 
+import hashlib
 import os
 import queue
 import threading
@@ -18,83 +19,45 @@ import customtkinter as ctk
 from PIL import Image
 
 from podbot.api_limits import get_daily_limit, set_daily_limit
-from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
+from podbot.audit import find_blocked_terms, get_blocklist, make_color_preview
 from podbot.credential_vault import erase_credentials, remember_credentials, restore_credentials
 from podbot.importer import import_design
+from podbot.job_queue import JobQueue
 from podbot.mockups import create_shirt_mockup
+from podbot.model_discovery import PROVIDER_KEYS, discover_models
+from podbot.offline_tasks import execute_next
 from podbot.pipeline import create_draft
-from podbot.processing import (
-    ProcessOptions,
-    background_module_available,
-    process_stored_design,
+from podbot.provider_catalog import LABELS, get_spec, make_provider, set_discovered_models
+from podbot.storage import list_designs
+from podbot.studio_actions import StudioActions
+from podbot.studio_pages import StudioPages, model_options, status_label
+from podbot.studio_theme import (
+    ACCENT,
+    ACCENT_HOVER,
+    ACCENT_TEXT,
+    BG,
+    BORDER,
+    CARD,
+    CARD_ALT,
+    MENU,
+    MUTED,
+    N_FONT,
+    PLATFORMS,
+    SIDEBAR,
+    STATUSES,
+    TEXT,
+    WHITE,
 )
-from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
-from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
-from podbot.settings import data_directory
-from podbot.storage import export_csv, list_designs, update_seo
 from podbot.trends import read_trends
+
+__all__ = ["ACCENT", "MENU", "STATUSES", "TEXT", "PODBotDesktop", "model_options", "status_label"]
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-BG = "#0B1220"
-SIDEBAR = "#101B2B"
-CARD = "#152438"
-CARD_ALT = "#1D3047"
-BORDER = "#263C54"
-ACCENT = "#30DBC2"
-ACCENT_HOVER = "#1DBEA8"
-ACCENT_TEXT = "#082923"
-WHITE = "#F1F7FC"
-MUTED = "#9DB0C2"
-DANGER = "#FB7185"
-WARNING = "#F5BD67"
-N_FONT = "Segoe UI"
-
-PLATFORMS = {"redbubble": "Redbubble", "teepublic": "TeePublic"}
-UPLOADER = {
-    "redbubble": "https://www.redbubble.com/portfolio/images/new",
-    "teepublic": "https://www.teepublic.com/",
-}
-
-MENU = (
-    ("overview", "⌂  Tổng quan"),
-    ("create", "✦  Sáng tạo AI"),
-    ("library", "▦  Thư viện thiết kế"),
-    ("trends", "◈  Xu hướng"),
-    ("settings", "⚙  Cài đặt API"),
-)
-
-TEXT = {
-    "app": "PODBot Studio",
-    "language": "Tiếng Việt",
-    "ready": "Sẵn sàng. Các thiết kế phải được duyệt trước khi đăng bán.",
-    "create": "Tạo thiết kế",
-    "import": "Nhập ảnh từ máy (không tốn phí AI)",
-    "rights": "Tôi xác nhận có quyền thương mại với hình ảnh và nội dung sản phẩm.",
-    "paid": "Lệnh tạo ảnh hoặc SEO này có thể bị tính phí API. Tiếp tục?",
-    "status_draft": "Bản nháp",
-    "status_approved": "Đã duyệt",
-    "status_uploaded": "Đã đăng",
-    "empty": "Chưa có thiết kế. Hãy tạo bằng AI hoặc nhập ảnh từ máy.",
-    "no_selection": "Vui lòng chọn một thiết kế trong thư viện.",
-}
-STATUSES = {
-    "draft": TEXT["status_draft"],
-    "approved": TEXT["status_approved"],
-    "uploaded": TEXT["status_uploaded"],
-}
 
 
-def model_options() -> list[str]:
-    return [spec.label for spec in CATALOG]
-
-
-def status_label(state: str) -> str:
-    return STATUSES.get(state, state)
-
-
-class PODBotDesktop(ctk.CTk):
+class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
     """Single-window, five-page navigation and event-driven background work."""
 
     def __init__(self) -> None:
@@ -104,6 +67,8 @@ class PODBotDesktop(ctk.CTk):
         self.minsize(940, 660)
         self.configure(fg_color=BG)
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
+        self.offline_jobs = JobQueue()
+        self.offline_jobs.recover()
         self.busy = False
         self.records: dict[str, dict] = {}
         self.selected_id: str | None = None
@@ -112,7 +77,11 @@ class PODBotDesktop(ctk.CTk):
         self.nav_buttons: dict[str, ctk.CTkButton] = {}
         self.pages: dict[str, ctk.CTkScrollableFrame] = {}
 
-        self.model = tk.StringVar(value=CATALOG[0].label)
+        self.model = tk.StringVar(value="Hãy kiểm tra API key trong Cài đặt")
+        self.api_discovery_vendor = tk.StringVar(value="openai")
+        self.verified_provider_keys: dict[str, str] = {}
+        self.verified_model_choices: dict[str, set[str]] = {}
+        self.manual_models_enabled = False
         self.seo = tk.StringVar(value="SEO offline (miễn phí)")
         self.resolution = tk.StringVar(value="2K")
         self.flat_background_prompt = tk.BooleanVar(value=True)
@@ -266,395 +235,6 @@ class PODBotDesktop(ctk.CTk):
         self._label(parent, description, 12, fg=MUTED, wraplength=750).pack(
             anchor="w", padx=9, pady=(0, 20),
         )
-
-    def _overview(self) -> None:
-        page = self.pages["overview"]
-        hero = ctk.CTkFrame(page, fg_color="#123C44", corner_radius=20)
-        hero.pack(fill="x", padx=8, pady=(12, 16))
-        self._label(hero, "PODBOT  /  CREATIVE DESKTOP", 11, fg=ACCENT, bold=True).pack(
-            anchor="w", padx=26, pady=(24, 9),
-        )
-        self._label(hero, "Biến ý tưởng thành thiết kế POD.", 27, bold=True).pack(
-            anchor="w", padx=26,
-        )
-        self._label(
-            hero, "Tạo ảnh AI, tối ưu SEO, kiểm tra chất lượng và chuẩn bị đăng bán "
-            "trên Redbubble hoặc TeePublic, tất cả trong một ứng dụng.",
-            13, fg="#C2E1E1", wraplength=700,
-        ).pack(anchor="w", padx=26, pady=(9, 20))
-        self._button(hero, "✦  Tạo thiết kế mới", lambda: self.show_page("create"),
-                     primary=True, width=194).pack(anchor="w", padx=26, pady=(0, 24))
-
-        self.stats = ctk.CTkFrame(page, fg_color="transparent")
-        self.stats.pack(fill="x", padx=7, pady=(0, 15))
-        for col in range(3):
-            self.stats.grid_columnconfigure(col, weight=1)
-        self.stat_labels: dict[str, ctk.CTkLabel] = {}
-        for col, (key, caption) in enumerate((
-            ("total", "THIẾT KẾ ĐÃ LƯU"),
-            ("approved", "ĐƯỢC PHÊ DUYỆT"),
-            ("uploaded", "ĐÃ ĐĂNG BÁN"),
-        )):
-            card = self._card(self.stats)
-            card.grid(row=0, column=col, sticky="ew", padx=5)
-            self._label(card, caption, 10, fg=MUTED, bold=True).pack(
-                anchor="w", padx=18, pady=(16, 8),
-            )
-            value = self._label(card, "0", 31, bold=True)
-            value.pack(anchor="w", padx=18, pady=(0, 16))
-            self.stat_labels[key] = value
-
-        recent = self._card(page)
-        recent.pack(fill="x", padx=8, pady=(0, 12))
-        self._label(recent, "Thiết kế gần đây", 17, bold=True).pack(
-            anchor="w", padx=20, pady=(19, 5),
-        )
-        self.recent_text = self._label(
-            recent, "Chưa có dữ liệu thiết kế.", 13, fg=MUTED, wraplength=770,
-            justify="left",
-        )
-        self.recent_text.pack(anchor="w", padx=20, pady=(0, 22))
-        quick = self._card(page)
-        quick.pack(fill="x", padx=8, pady=(0, 18))
-        self._label(quick, "Quy trình bảo vệ thiết kế", 16, bold=True).pack(
-            anchor="w", padx=20, pady=(18, 9),
-        )
-        self._label(
-            quick,
-            "① Tạo ảnh hoặc nhập PNG   →   ② Kiểm tra chất lượng và SEO\n"
-            "③ Xác nhận quyền thương mại   →   ④ Duyệt từng sàn   →   ⑤ Đăng thủ công",
-            13, fg=MUTED, justify="left",
-        ).pack(anchor="w", padx=20, pady=(0, 20))
-
-    def _create(self) -> None:
-        page = self.pages["create"]
-        self._section(
-            page, "Studio sáng tạo",
-            "Mỗi lần bấm tạo sẽ gửi một yêu cầu đến model đã chọn. "
-            "Hãy kiểm tra chi phí của nhà cung cấp trước khi sử dụng.",
-        )
-        form = self._card(page)
-        form.pack(fill="x", padx=8, pady=(0, 16))
-        self._label(form, "MÔ TẢ THIẾT KẾ / PROMPT", 11, fg=ACCENT, bold=True).pack(
-            anchor="w", padx=20, pady=(19, 8),
-        )
-        self.prompt_box = ctk.CTkTextbox(
-            form, height=115, font=self._font(13), corner_radius=10,
-            fg_color=BG, text_color=WHITE, border_width=1, border_color=BORDER,
-            wrap="word",
-        )
-        self.prompt_box.pack(fill="x", padx=20)
-        self.prompt_box.insert(
-            "1.0", "Original minimalist mountain sunrise illustration, crisp shapes, "
-            "centered composition for T-shirt print, no lettering, no logos",
-        )
-        fields = ctk.CTkFrame(form, fg_color="transparent")
-        fields.pack(fill="x", padx=20, pady=(14, 6))
-        fields.grid_columnconfigure((0, 1), weight=1)
-        for col, (label, variable) in enumerate((
-            ("CHỦ ĐỀ / NGÁCH BÁN", self.niche),
-            ("TỪ KHÓA (CÁCH NHAU BẰNG DẤU PHẨY)", self.keywords),
-        )):
-            group = ctk.CTkFrame(fields, fg_color="transparent")
-            group.grid(row=0, column=col, sticky="ew", padx=(0, 9) if col == 0 else (9, 0))
-            self._label(group, label, 10, fg=MUTED, bold=True).pack(
-                anchor="w", pady=(0, 7),
-            )
-            ctk.CTkEntry(
-                group, textvariable=variable, height=41, corner_radius=10,
-                fg_color=BG, border_color=BORDER, text_color=WHITE,
-                font=self._font(12),
-            ).pack(fill="x")
-        self._label(form, "MÔ HÌNH TẠO ẢNH", 10, fg=MUTED, bold=True).pack(
-            anchor="w", padx=20, pady=(15, 7),
-        )
-        self.model_dropdown = ctk.CTkOptionMenu(
-            form, values=model_options(), variable=self.model,
-            height=42, corner_radius=10, fg_color=CARD_ALT,
-            button_color="#284C64", button_hover_color=BORDER,
-            text_color=WHITE, font=self._font(12),
-            command=self._model_changed,
-        )
-        self.model_dropdown.pack(fill="x", padx=20)
-
-        options = ctk.CTkFrame(form, fg_color="transparent")
-        options.pack(fill="x", padx=20, pady=(14, 4))
-        options.grid_columnconfigure((0, 1), weight=1)
-        seo_group = ctk.CTkFrame(options, fg_color="transparent")
-        seo_group.grid(row=0, column=0, sticky="ew", padx=(0, 9))
-        self._label(seo_group, "SEO", 10, fg=MUTED, bold=True).pack(anchor="w", pady=(0, 6))
-        ctk.CTkOptionMenu(
-            seo_group, values=["SEO offline (miễn phí)", "Gemini AI SEO (có thể tính phí)"],
-            variable=self.seo, height=40, corner_radius=10, fg_color=CARD_ALT,
-            button_color="#284C64", text_color=WHITE,
-        ).pack(fill="x")
-        size_group = ctk.CTkFrame(options, fg_color="transparent")
-        size_group.grid(row=0, column=1, sticky="ew", padx=(9, 0))
-        self._label(size_group, "ĐỘ PHÂN GIẢI GEMINI", 10, fg=MUTED, bold=True).pack(
-            anchor="w", pady=(0, 6),
-        )
-        ctk.CTkOptionMenu(
-            size_group, values=["1K", "2K", "4K"], variable=self.resolution,
-            height=40, corner_radius=10, fg_color=CARD_ALT,
-            button_color="#284C64", text_color=WHITE,
-        ).pack(fill="x")
-        ctk.CTkCheckBox(
-            form, text="Thêm gợi ý nền trắng phẳng để dễ tách nền (bật/tắt)",
-            variable=self.flat_background_prompt, onvalue=True, offvalue=False,
-            fg_color=ACCENT, hover_color=ACCENT_HOVER,
-            text_color=WHITE, font=self._font(12),
-        ).pack(anchor="w", padx=20, pady=(12, 0))
-        self.model_explanation = self._label(
-            form, "", 11, fg=MUTED, wraplength=680, justify="left",
-        )
-        self.model_explanation.pack(anchor="w", padx=20, pady=(12, 11))
-        buttons = ctk.CTkFrame(form, fg_color="transparent")
-        buttons.pack(fill="x", padx=20, pady=(0, 20))
-        self.create_button = self._button(
-            buttons, "✦  Tạo bằng AI", self.generate, primary=True, width=165,
-        )
-        self.create_button.pack(side="left", padx=(0, 10))
-        self._button(
-            buttons, "↑  Nhập ảnh từ máy (0 phí API)",
-            self.import_file, width=230,
-        ).pack(side="left")
-        self._model_changed(self.model.get())
-
-        note = self._card(page)
-        note.pack(fill="x", padx=8, pady=(0, 18))
-        self._label(note, "Lưu ý trước khi tạo", 14, bold=True).pack(
-            anchor="w", padx=18, pady=(17, 7),
-        )
-        self._label(
-            note, "Không dùng hình nhân vật bản quyền hoặc nhãn hiệu khi chưa được phép. "
-            "Ảnh AI chưa chắc có nền trong suốt hoặc đủ chi tiết để in. "
-            "Bộ kiểm tra chất lượng sẽ hỗ trợ bạn trước khi đăng bán.",
-            12, fg=MUTED, wraplength=740, justify="left",
-        ).pack(anchor="w", padx=18, pady=(0, 19))
-
-    def _model_changed(self, _value: str) -> None:
-        model_id = LABELS.get(self.model.get())
-        if model_id:
-            spec = get_spec(model_id)
-            pricing = "Dịch vụ tính phí" if spec.paid else "Hạn mức / tín dụng có giới hạn"
-            self.model_explanation.configure(
-                text=f"ℹ  {pricing}  •  {spec.hint}  •  API key: {spec.env_key}",
-            )
-
-    def _library(self) -> None:
-        page = self.pages["library"]
-        self._section(
-            page, "Thư viện thiết kế",
-            "Quản lý file PNG, chỉnh SEO, xử lý ảnh và duyệt đăng bán theo từng nền tảng.",
-        )
-        control = self._card(page)
-        control.pack(fill="x", padx=8, pady=(0, 12))
-        row = ctk.CTkFrame(control, fg_color="transparent")
-        row.pack(fill="x", padx=15, pady=13)
-        self._button(row, "↻  Làm mới", self.refresh, width=116).pack(side="left")
-        self._label(row, "NỀN TẢNG", 10, fg=MUTED, bold=True).pack(
-            side="left", padx=(20, 10),
-        )
-        ctk.CTkOptionMenu(
-            row, values=list(PLATFORMS), variable=self.platform, width=146,
-            fg_color=CARD_ALT, button_color="#284C64", text_color=WHITE,
-            command=lambda _value: self._update_inspector(),
-        ).pack(side="left")
-
-        selector = self._card(page)
-        selector.pack(fill="x", padx=8, pady=(0, 12))
-        self._label(selector, "Chọn thiết kế", 15, bold=True).pack(
-            anchor="w", padx=18, pady=(15, 7),
-        )
-        self.library_list = ctk.CTkScrollableFrame(
-            selector, height=185, fg_color="transparent",
-        )
-        self.library_list.pack(fill="x", padx=10, pady=(0, 12))
-        detail = self._card(page)
-        detail.pack(fill="x", padx=8, pady=(0, 16))
-        self._label(detail, "Chi tiết sản phẩm và thao tác", 16, bold=True).pack(
-            anchor="w", padx=20, pady=(18, 9),
-        )
-        info = ctk.CTkFrame(detail, fg_color="transparent")
-        info.pack(fill="x", padx=20, pady=(0, 12))
-        self.art_preview = self._label(info, "CHƯA CHỌN ẢNH", 13, fg=MUTED)
-        self.art_preview.pack(side="left", padx=(0, 17), pady=9)
-        text_area = ctk.CTkFrame(info, fg_color="transparent")
-        text_area.pack(side="left", fill="x", expand=True)
-        self.detail_name = self._label(
-            text_area, "Chọn một thiết kế ở phía trên", 14, bold=True, wraplength=430,
-        )
-        self.detail_name.pack(anchor="w")
-        self.detail_status = self._label(text_area, "", 12, fg=ACCENT)
-        self.detail_status.pack(anchor="w", pady=(7, 0))
-        self.detail_warning = self._label(
-            text_area, "", 11, fg=WARNING, wraplength=440, justify="left",
-        )
-        self.detail_warning.pack(anchor="w", pady=(8, 0))
-        self._label(detail, "THAO TÁC THIẾT KẾ", 10, fg=MUTED, bold=True).pack(
-            anchor="w", padx=20, pady=(6, 9),
-        )
-        edits = ctk.CTkFrame(detail, fg_color="transparent")
-        edits.pack(fill="x", padx=20)
-        for column in range(3):
-            edits.grid_columnconfigure(column, weight=1)
-        for index, (title, cmd) in enumerate((
-            ("Xem PNG", self.open_png),
-            ("Chỉnh SEO", self.edit_seo),
-            ("Kiểm tra chất lượng", self.preflight),
-            ("Xử lý lại ảnh", self.process_image),
-            ("Xem màu áo", self.preview_colors),
-            ("Mockup áo thun", self.preview_shirt),
-        )):
-            self._button(edits, title, cmd, width=130).grid(
-                row=index // 3, column=index % 3, sticky="ew",
-                padx=4, pady=(0, 8),
-            )
-        self._label(detail, "DUYỆT VÀ ĐĂNG SẢN PHẨM", 10, fg=MUTED, bold=True).pack(
-            anchor="w", padx=20, pady=(13, 9),
-        )
-        publish = ctk.CTkFrame(detail, fg_color="transparent")
-        publish.pack(fill="x", padx=20, pady=(0, 20))
-        for title, cmd, primary in (
-            ("✓  Duyệt thiết kế", self.approve, True),
-            ("↗  Mở trang đăng", self.open_store, False),
-            ("Đã đăng", self.mark_uploaded, False),
-            ("Xuất CSV đã duyệt", self.export, False),
-        ):
-            self._button(publish, title, cmd, primary=primary, width=151).pack(
-                side="left", padx=(0, 8),
-            )
-
-    def _trends(self) -> None:
-        page = self.pages["trends"]
-        self._section(
-            page, "Khám phá xu hướng",
-            "Đọc Google Trends RSS trực tiếp. Xu hướng tìm kiếm không đồng nghĩa "
-            "với quyền sử dụng thương hiệu hoặc cơ hội bán hàng được đảm bảo.",
-        )
-        card = self._card(page)
-        card.pack(fill="x", padx=8, pady=(0, 12))
-        bar = ctk.CTkFrame(card, fg_color="transparent")
-        bar.pack(fill="x", padx=18, pady=17)
-        self._label(bar, "QUỐC GIA", 11, fg=MUTED, bold=True).pack(side="left", padx=(0, 12))
-        ctk.CTkOptionMenu(
-            bar, values=["US", "GB", "CA", "AU", "DE", "FR", "JP", "KR", "BR", "IN"],
-            variable=self.country, width=110, fg_color=CARD_ALT,
-            button_color="#284C64", text_color=WHITE,
-        ).pack(side="left")
-        self.trend_button = self._button(
-            bar, "↻  Tải xu hướng", self.fetch_trends, primary=True, width=160,
-        )
-        self.trend_button.pack(side="left", padx=13)
-        results = self._card(page)
-        results.pack(fill="x", padx=8, pady=(0, 16))
-        self._label(results, "Chủ đề đang được tìm kiếm", 17, bold=True).pack(
-            anchor="w", padx=20, pady=(18, 10),
-        )
-        self.trend_rows = ctk.CTkScrollableFrame(
-            results, height=290, fg_color="transparent",
-        )
-        self.trend_rows.pack(fill="x", padx=12, pady=(0, 15))
-        self._label(
-            self.trend_rows, "Bấm “Tải xu hướng” để xem dữ liệu có nguồn.",
-            12, fg=MUTED,
-        ).pack(anchor="w", padx=12, pady=12)
-
-    def _settings(self) -> None:
-        page = self.pages["settings"]
-        self._section(
-            page, "Cài đặt kết nối AI",
-            "Dán API key của dịch vụ bạn sử dụng. Key chỉ được giữ trong bộ nhớ "
-            "phiên chạy, không ghi xuống mã nguồn hoặc manifest thiết kế.",
-        )
-        card = self._card(page)
-        card.pack(fill="x", padx=8, pady=(0, 14))
-        names = (
-            ("CLOUDFLARE_ACCOUNT_ID", "Cloudflare Account ID"),
-            ("CLOUDFLARE_API_TOKEN", "Cloudflare API Token"),
-            ("HF_TOKEN", "Hugging Face Token"),
-            ("GEMINI_API_KEY", "Gemini (tạo ảnh + SEO)"),
-            ("OPENAI_API_KEY", "OpenAI API"),
-            ("REPLICATE_API_TOKEN", "Replicate"),
-            ("FAL_KEY", "fal.ai"),
-            ("STABILITY_API_KEY", "Stability AI"),
-        )
-        for index, (key, label) in enumerate(names):
-            self._label(card, label, 12, bold=True).pack(
-                anchor="w", padx=20, pady=(19 if index == 0 else 12, 5),
-            )
-            ctk.CTkEntry(
-                card, textvariable=self.keys[key], show="" if "ACCOUNT_ID" in key else "•",
-                height=39, corner_radius=10, fg_color=BG, border_color=BORDER,
-                text_color=WHITE, placeholder_text=f"Nhập {key} (tùy chọn)",
-                font=self._font(12),
-            ).pack(fill="x", padx=20, pady=(0, 4))
-        self._label(
-            card, "Lưu ý: không chia sẻ API key, token hoặc ảnh chụp màn hình chứa thông tin bí mật.",
-            11, fg=WARNING, wraplength=730,
-        ).pack(anchor="w", padx=20, pady=(14, 20))
-        limits = self._card(page)
-        limits.pack(fill="x", padx=8, pady=(0, 14))
-        self._label(limits, "GIỚI HẠN API VÀ KHO KHÓA WINDOWS", 14, bold=True).pack(
-            anchor="w", padx=20, pady=(16, 8),
-        )
-        self._label(
-            limits,
-            "Số lượt GỌI API có thể tính phí tối đa mỗi nhà cung cấp trong một ngày "
-            "(tính cả Gemini SEO). Đây KHÔNG phải hạn mức USD hay số tiền đã trừ; "
-            "hãy đặt hạn mức tiền thật ở dashboard nhà cung cấp.",
-            11, fg=MUTED, wraplength=720,
-        ).pack(anchor="w", padx=20, pady=(0, 9))
-        row = ctk.CTkFrame(limits, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=(0, 12))
-        ctk.CTkEntry(
-            row, textvariable=self.paid_calls_cap, width=80, height=37,
-            fg_color=BG, border_color=BORDER,
-        ).pack(side="left", padx=(0, 8))
-        self._button(row, "Lưu giới hạn ngày", self.save_api_cap, width=175).pack(side="left")
-        self._label(
-            limits, "Tính theo ngày địa phương của Windows, không phải UTC. Mặc định 3 lượt / nhà cung cấp / ngày; 0 sẽ chặn mọi API tính phí. "
-            "Tác vụ đã gửi không được hoàn lượt vì có thể đã bị tính tiền.",
-            11, fg=WARNING, wraplength=720,
-        ).pack(anchor="w", padx=20, pady=(0, 13))
-        if os.getenv("PODBOT_PAID_CALLS_PER_DAY") is not None:
-            self._label(
-                limits,
-                "⚠ Biến môi trường PODBOT_PAID_CALLS_PER_DAY = "
-                + os.getenv("PODBOT_PAID_CALLS_PER_DAY", "")
-                + " đang GHI ĐÈ hạn mức trong giao diện.",
-                11, fg=WARNING, wraplength=720,
-            ).pack(anchor="w", padx=20, pady=(0, 13))
-        actions = ctk.CTkFrame(limits, fg_color="transparent")
-        actions.pack(fill="x", padx=20, pady=(0, 19))
-        for label, callback in (
-            ("Lưu key vào Windows", self.store_api_keys),
-            ("Khôi phục key", self.restore_api_keys),
-            ("Xóa key đã lưu", self.clear_api_keys),
-        ):
-            self._button(actions, label, callback, width=170).pack(
-                side="left", padx=(0, 9),
-            )
-        other = self._card(page)
-        other.pack(fill="x", padx=8, pady=(0, 17))
-        self._label(other, "Tệp và quyền riêng tư", 16, bold=True).pack(
-            anchor="w", padx=19, pady=(18, 8),
-        )
-        self._label(
-            other, "Ảnh, bản nháp và SEO lưu trên máy. Bạn kiểm soát "
-            "việc duyệt và tải lên Redbubble / TeePublic.",
-            12, fg=MUTED, wraplength=710,
-        ).pack(anchor="w", padx=19, pady=(0, 12))
-        buttons = ctk.CTkFrame(other, fg_color="transparent")
-        buttons.pack(anchor="w", padx=18, pady=(0, 20))
-        self._button(
-            buttons, "Mở thư mục dữ liệu",
-            lambda: self._open_file(data_directory()), width=180,
-        ).pack(side="left", padx=(0, 9))
-        self._button(
-            buttons, "Sửa danh sách từ khóa cảnh báo",
-            self.edit_blocklist, width=255,
-        ).pack(side="left")
 
     def save_api_cap(self) -> None:
         try:
@@ -819,6 +399,10 @@ class PODBotDesktop(ctk.CTk):
                     continue
                 if kind == "ok":
                     self.message.set("✓  Đã hoàn tất. Dữ liệu được lưu trên máy.")
+                    if isinstance(result, dict) and "_model_discovery" in result:
+                        self._apply_discovery(result)
+                    if isinstance(result, dict) and "_job_inspection" in result:
+                        messagebox.showinfo("Kiểm tra ảnh + OCR", result["_job_inspection"])
                     self.refresh()
                     if isinstance(result, dict) and "id" in result:
                         self.selected_id = result["id"]
@@ -831,6 +415,88 @@ class PODBotDesktop(ctk.CTk):
         except queue.Empty:
             pass
         self.after(120, self._handle_events)
+        self._drain_offline_jobs()
+
+    @staticmethod
+    def _credential_fingerprint(provider: str, credentials: dict[str, str]) -> str:
+        key = credentials.get(PROVIDER_KEYS[provider], "").strip()
+        account = credentials.get("CLOUDFLARE_ACCOUNT_ID", "") if provider == "cloudflare" else ""
+        return hashlib.sha256((provider + "\0" + account + "\0" + key).encode()).hexdigest()
+
+    def check_provider_models(self) -> None:
+        if self.busy:
+            return
+        provider = self.api_discovery_vendor.get()
+        credentials = {name: field.get() for name, field in self.keys.items()}
+        if not credentials.get(PROVIDER_KEYS[provider], "").strip():
+            messagebox.showwarning("Thiếu API key", "Nhập key trước khi kiểm tra.")
+            return
+        fingerprint = self._credential_fingerprint(provider, credentials)
+
+        def work():
+            result = discover_models(provider, credentials)
+            return {"_model_discovery": result, "_fingerprint": fingerprint}
+
+        self._run("Đang xác minh key và lấy danh sách model (chỉ đọc)...", work)
+
+    def _verified_model_labels(self) -> list[str]:
+        current = {name: field.get() for name, field in self.keys.items()}
+        selections: set[str] = set()
+        for provider, fingerprint in self.verified_provider_keys.items():
+            if fingerprint == self._credential_fingerprint(provider, current):
+                selections.update(self.verified_model_choices.get(provider, set()))
+        return [label for label, model_id in LABELS.items() if model_id in selections]
+
+    def _apply_discovery(self, payload: dict) -> None:
+        result = payload["_model_discovery"]
+        current = {key: field.get() for key, field in self.keys.items()}
+        if payload["_fingerprint"] != self._credential_fingerprint(result.provider, current):
+            self.model_scan_status.configure(
+                text="API key đã thay đổi trong lúc kiểm tra. Hãy kiểm tra lại.",
+            )
+            return
+        if result.verified:
+            self.verified_provider_keys[result.provider] = payload["_fingerprint"]
+        else:
+            self.verified_provider_keys.pop(result.provider, None)
+        found = set_discovered_models(result.provider, result.models)
+        self.verified_model_choices[result.provider] = (
+            {spec.id for spec in found} if result.verified else set()
+        )
+        message = result.message
+        if found:
+            message += f"\n{len(found)} model tương thích được liệt kê, không thêm mục trùng."
+        else:
+            message += "\nKhông thấy model phù hợp trong trang đã kiểm tra."
+        if result.provider in ("replicate", "cloudflare"):
+            message += (
+                "\nDanh sách API có thể chưa đầy đủ. Preset vẫn có thể chọn "
+                "trong chế độ thủ công, nhưng chưa xác minh quyền sử dụng."
+            )
+        self.model_scan_status.configure(text=message)
+        values = self._verified_model_labels()
+        if self.manual_models_enabled:
+            values = list(dict.fromkeys([*values, *model_options()]))
+        if not values:
+            values = ["Hãy kiểm tra API key trong Cài đặt"]
+        self.model_dropdown.configure(values=values)
+        self.model.set(values[0])
+        self._model_changed(self.model.get())
+        self.message.set("Đã kiểm tra key; chưa phát sinh lượt tạo ảnh tính phí.")
+
+    def use_manual_model_presets(self) -> None:
+        if not messagebox.askyesno(
+            "Bật preset thủ công",
+            "Danh sách preset là cấu hình mẫu, không xác minh quyền truy cập "
+            "hoặc các thông số model mới. Mọi lần tạo ảnh tính phí vẫn cần "
+            "xác nhận. Bạn muốn bật preset thủ công?",
+        ):
+            return
+        self.manual_models_enabled = True
+        choices = list(dict.fromkeys([*self._verified_model_labels(), *model_options()]))
+        self.model_dropdown.configure(values=choices)
+        self.model.set(choices[0])
+        self._model_changed(self.model.get())
 
     def generate(self) -> None:
         prompt = self.prompt_box.get("1.0", "end").strip()
@@ -849,6 +515,22 @@ class PODBotDesktop(ctk.CTk):
             messagebox.showerror("Model chưa hỗ trợ", "Vui lòng chọn model trong danh sách.")
             return
         spec = get_spec(model_id)
+        confirmed_from_listing = model_id in self.verified_model_choices.get(
+            spec.vendor, set()
+        )
+        if confirmed_from_listing or model_id.startswith("discovered:"):
+            current = {name: field.get() for name, field in self.keys.items()}
+            if (not confirmed_from_listing or self.verified_provider_keys.get(spec.vendor)
+                    != self._credential_fingerprint(spec.vendor, current)):
+                messagebox.showwarning(
+                    "API key đã đổi", "Hãy kiểm tra lại key để cập nhật model khả dụng."
+                )
+                return
+        elif not self.manual_models_enabled:
+            messagebox.showwarning(
+                "Model chưa kiểm tra", "Hãy kiểm tra API key hoặc bật preset thủ công."
+            )
+            return
         seo_mode = "gemini" if self.seo.get().startswith("Gemini") else "local"
         if (spec.paid or seo_mode == "gemini") and not messagebox.askyesno(
             "Xác nhận có thể phát sinh phí",
@@ -892,17 +574,66 @@ class PODBotDesktop(ctk.CTk):
             self._label(self.trend_rows, "Nguồn RSS không có dữ liệu trong đợt tải này.",
                         12, fg=MUTED).pack(anchor="w", padx=10, pady=10)
         for trend in trends:
+            blocked = find_blocked_terms(
+                " ".join((trend.title, *trend.keywords)), get_blocklist()
+            )
             row = ctk.CTkFrame(self.trend_rows, fg_color=CARD_ALT, corner_radius=11)
             row.pack(fill="x", padx=5, pady=5)
             self._label(row, trend.title, 13, bold=True).pack(
                 anchor="w", padx=14, pady=(10, 2),
             )
             self._label(row, f"Lượt quan tâm: {trend.approx_traffic}  ·  {trend.published}",
-                        10, fg=MUTED).pack(anchor="w", padx=14, pady=(0, 8))
+                        10, fg=MUTED).pack(anchor="w", padx=14, pady=(0, 6))
+            if blocked:
+                self._label(
+                    row, "⚠  Trùng blocklist: " + ", ".join(blocked[:5])
+                    + " · Không tự điền vào thiết kế",
+                    11, fg="#FFB867", wraplength=670,
+                ).pack(anchor="w", padx=14, pady=(0, 5))
+            keywords = ", ".join(trend.keywords[:8]) or "Chưa có từ khóa đủ tin cậy"
+            self._label(row, f"Gợi ý từ khóa RSS: {keywords}",
+                        11, fg=WHITE, wraplength=670, justify="left").pack(
+                anchor="w", padx=14, pady=(0, 6),
+            )
+            if trend.news_titles:
+                self._label(row, f"Bài báo liên quan: {trend.news_titles[0]}",
+                            10, fg=MUTED, wraplength=680, justify="left").pack(
+                    anchor="w", padx=14, pady=(0, 5),
+                )
+            controls = ctk.CTkFrame(row, fg_color="transparent")
+            controls.pack(anchor="e", padx=12, pady=(0, 10))
             self._button(
-                row, "Sao chép chủ đề",
-                lambda topic=trend.title: self._copy(topic), width=152,
-            ).pack(anchor="e", padx=12, pady=(0, 10))
+                controls, "Sao chép từ khóa",
+                lambda terms=trend.keywords: self._copy(", ".join(terms)), width=147,
+            ).pack(side="left", padx=4)
+            self._button(
+                controls, "Dùng chủ đề + từ khóa",
+                lambda selected=trend: self._use_trend(selected), width=180,
+            ).pack(side="left", padx=4)
+            if blocked:
+                controls.winfo_children()[-1].configure(state="disabled")
+
+    def _use_trend(self, trend) -> None:
+        if not trend.keywords:
+            messagebox.showinfo("Thiếu từ khóa", "Không có từ khóa đáng tin từ RSS.")
+            return
+        if find_blocked_terms(" ".join((trend.title, *trend.keywords)), get_blocklist()):
+            messagebox.showwarning(
+                "Từ khóa cần rà soát",
+                "Xu hướng có từ khóa trong blocklist, không tự đưa vào mẫu thiết kế.",
+            )
+            return
+        if not messagebox.askyesno(
+            "Chuyển vào mẫu thiết kế",
+            "Đây là từ khóa gợi ý từ tiêu đề RSS/bài báo, KHÔNG phải Related Queries "
+            "được Google xác nhận. Xu hướng có thể chứa thương hiệu hoặc người thật.\n"
+            "Bạn phải rà soát quyền thương mại và viết prompt riêng. Tiếp tục?",
+        ):
+            return
+        self.niche.set(trend.title)
+        self.keywords.set(", ".join(trend.keywords[:8]))
+        self.show_page("create")
+        self.message.set("Đã điền chủ đề và từ khóa. Chưa phát sinh yêu cầu AI hay phí API.")
 
     def _copy(self, value: str) -> None:
         self.clipboard_clear()
@@ -923,25 +654,51 @@ class PODBotDesktop(ctk.CTk):
     def preflight(self) -> None:
         if not (entry := self._selected()):
             return
-        platform = self.platform.get()
+        self.offline_jobs.enqueue(
+            "inspect", {"design_id": entry["id"], "platform": self.platform.get()}
+        )
+        self.message.set("Đã thêm kiểm tra ảnh + OCR vào hàng đợi.")
+        self._drain_offline_jobs()
 
-        def inspect():
-            with Image.open(entry["print_file"]) as original:
-                checks = audit_image(original, platform)
-            lines = [
-                f"{x.level.upper()} · {x.name} · {x.message}"
-                for x in checks
-            ]
-            return "\n".join(lines)
+    def _drain_offline_jobs(self) -> None:
+        if self.busy or not any(job.status == "pending" for job in self.offline_jobs.list()):
+            return
+        self._run("Đang xử lý hàng đợi offline...", execute_next, self.offline_jobs)
 
-        # The quality scan can be expensive on a 5000x5500 PNG.
-        self._run("Đang kiểm tra thông số ảnh in...",
-                  self._show_quality, inspect)
-
-    def _show_quality(self, inspect) -> dict:
-        report = inspect()
-        self.events.put(("quality", report))
-        return {}
+    def show_jobs(self) -> None:
+        jobs = self.offline_jobs.list()
+        if not jobs:
+            messagebox.showinfo("Hàng đợi tác vụ", "Chưa có tác vụ offline.")
+            return
+        popup = ctk.CTkToplevel(self)
+        popup.title("Hàng đợi offline")
+        popup.geometry("550x250")
+        popup.transient(self)
+        popup.grab_set()
+        choices = {
+            f"{job.id[:10]} · {job.kind} · {job.status} · {job.attempts}/{job.max_attempts}": job.id
+            for job in jobs
+        }
+        selected = tk.StringVar(value=next(iter(choices)))
+        self._label(popup, "Chọn tác vụ · Tạo ảnh AI không nằm trong hàng đợi này",
+                    13, fg=MUTED).pack(padx=16, pady=(20, 12))
+        ctk.CTkOptionMenu(popup, values=list(choices), variable=selected,
+                          width=490).pack(padx=16)
+        def change(action: str) -> None:
+            job_id = choices[selected.get()]
+            changed = (
+                self.offline_jobs.retry(job_id) if action == "retry"
+                else self.offline_jobs.cancel(job_id)
+            )
+            messagebox.showinfo("Hàng đợi", "Đã cập nhật." if changed else
+                                "Không thể thay đổi tác vụ đang chạy/đã hoàn tất.",
+                                parent=popup)
+            popup.destroy()
+            self._drain_offline_jobs()
+        buttons = ctk.CTkFrame(popup, fg_color="transparent")
+        buttons.pack(pady=22)
+        self._button(buttons, "Thử lại", lambda: change("retry")).pack(side="left", padx=7)
+        self._button(buttons, "Hủy chờ", lambda: change("cancel")).pack(side="left", padx=7)
 
     def preview_colors(self) -> None:
         if not (entry := self._selected()):
@@ -970,184 +727,6 @@ class PODBotDesktop(ctk.CTk):
 
         self._run("Đang tạo mô phỏng áo thun...", worker)
 
-    def edit_seo(self) -> None:
-        if not (entry := self._selected()):
-            return
-        popup = ctk.CTkToplevel(self)
-        popup.title("Chỉnh sửa SEO · PODBot")
-        popup.geometry("670x555")
-        popup.configure(fg_color=BG)
-        popup.transient(self)
-        popup.grab_set()
-        seo = entry["seo"]
-        self._label(popup, "Chỉnh sửa nội dung sản phẩm", 21, bold=True).pack(
-            anchor="w", padx=23, pady=(23, 15),
-        )
-        self._label(popup, "Tiêu đề", 12, fg=MUTED).pack(
-            anchor="w", padx=23,
-        )
-        title = ctk.CTkEntry(popup, height=40, fg_color=CARD, border_color=BORDER)
-        title.pack(fill="x", padx=23, pady=(5, 12))
-        title.insert(0, seo["title"])
-        self._label(popup, "Mô tả", 12, fg=MUTED).pack(anchor="w", padx=23)
-        description = ctk.CTkTextbox(popup, height=125, fg_color=CARD,
-                                     border_color=BORDER, border_width=1)
-        description.pack(fill="x", padx=23, pady=(5, 12))
-        description.insert("1.0", seo["description"])
-        self._label(popup, "Thẻ tags (phân tách bằng dấu phẩy)", 12, fg=MUTED).pack(
-            anchor="w", padx=23,
-        )
-        tags = ctk.CTkTextbox(popup, height=70, fg_color=CARD,
-                               border_color=BORDER, border_width=1)
-        tags.pack(fill="x", padx=23, pady=(5, 15))
-        tags.insert("1.0", ", ".join(seo["tags"]))
-
-        def save() -> None:
-            try:
-                update_seo(entry["id"], title.get(),
-                           description.get("1.0", "end").strip(),
-                           tags.get("1.0", "end").split(","))
-            except (OSError, ValueError) as exc:
-                messagebox.showerror("Không lưu được SEO", str(exc), parent=popup)
-                return
-            popup.destroy()
-            self.refresh()
-            self.message.set("Đã lưu SEO. Nếu đã duyệt trước đó, phải duyệt lại.")
-
-        self._button(popup, "Lưu thay đổi", save, primary=True, width=175).pack(
-            anchor="e", padx=23, pady=(0, 20),
-        )
-
-    def process_image(self) -> None:
-        if not (entry := self._selected()):
-            return
-        flat = messagebox.askyesno(
-            "Tách nền phẳng bằng Pillow, có sẵn trong EXE",
-            "Ảnh có nền trắng/màu phẳng gần đồng nhất?\n"
-            "Có = dùng flood-fill từ các mép, không cần API/ML.\n"
-            "Không = chọn rembg (nếu có) hoặc giữ nguyên nền.\n"
-            "Lưu ý: kiểm tra kỹ chữ trắng, nét mảnh và quầng viền sau tách.",
-        )
-        remove, rembg = False, None
-        if not flat:
-            available = background_module_available()
-            remove = messagebox.askyesno(
-                "Tách nền AI rembg tùy chọn",
-                "rembg Python đã cài: " + ("Có" if available else "Chưa") + ".\n"
-                "Có = dùng rembg (có thể tải model lần đầu). "
-                "Không = chỉ chuẩn hóa/căn lề file in.",
-            )
-            if remove and not available:
-                if not messagebox.askyesno(
-                    "Chưa có rembg trong EXE",
-                    "Bạn có rembg.exe cài riêng? Chọn Có để duyệt file. "
-                    "Nếu chạy mã nguồn có thể pip install -e \".[bg]\".",
-                ):
-                    return
-                chosen = filedialog.askopenfilename(title="Chọn rembg.exe đã cài riêng")
-                if not chosen:
-                    return
-                rembg = Path(chosen)
-        upscale = messagebox.askyesno(
-            "Phóng to bằng Real-ESRGAN",
-            "Bạn muốn sử dụng Real-ESRGAN đã cài riêng? "
-            "Chọn Không để dùng Lanczos.",
-        )
-        esrgan = None
-        if upscale:
-            chosen = filedialog.askopenfilename(title="Chọn Real-ESRGAN executable")
-            if not chosen:
-                return
-            esrgan = Path(chosen)
-        if not messagebox.askyesno(
-            "Tạo lại file in",
-            "Sẽ lưu một file mới và hủy phê duyệt đăng bán trước đó. "
-            "Sau khi xử lý, bạn cần kiểm tra file PNG và mockup. Tiếp tục?",
-        ):
-            return
-        options = ProcessOptions(
-            flat_background=flat, remove_background=remove,
-            rembg_binary=rembg, upscale=upscale, esrgan_binary=esrgan,
-        )
-        self._run(
-            "Đang cắt nền / tạo lại file in...",
-            process_stored_design, entry["id"], options,
-        )
-
-    def approve(self) -> None:
-        if not (entry := self._selected()):
-            return
-        platform = self.platform.get()
-        if not entry.get("rights_confirmed_at"):
-            if not messagebox.askyesno(
-                "Xác nhận quyền bán thương mại",
-                "Tôi xác nhận có quyền sử dụng thiết kế này để bán, đã rà soát "
-                "nội dung, nhãn hiệu, chính sách nền tảng và file in.",
-            ):
-                return
-            try:
-                confirm_rights(entry["id"])
-            except (OSError, ValueError) as exc:
-                messagebox.showerror("Không xác nhận được", str(exc))
-                return
-        self._run("Đang đánh giá chất lượng và xét duyệt...",
-                  approve_listing, entry["id"], platform)
-
-    def open_store(self) -> None:
-        if not (entry := self._selected()):
-            return
-        platform = self.platform.get()
-        if entry.get("platform_status", {}).get(platform) != "approved":
-            messagebox.showwarning("Chưa được duyệt",
-                                   "Bạn phải phê duyệt thiết kế cho sàn này trước.")
-            return
-        messagebox.showinfo(
-            "Đăng bán thủ công",
-            "Ứng dụng mở trang chính sách và trang bán hàng. "
-            "Bạn cần tự tải PNG lên, kiểm tra vị trí, giá, tags và xác nhận.",
-        )
-        webbrowser.open(POLICY_URLS[platform])
-        webbrowser.open(UPLOADER[platform])
-
-    def mark_uploaded(self) -> None:
-        if not (entry := self._selected()):
-            return
-        platform = self.platform.get()
-        if entry.get("platform_status", {}).get(platform) != "approved":
-            messagebox.showwarning("Chưa duyệt", "Hãy phê duyệt trước khi đánh dấu đã đăng.")
-            return
-        if messagebox.askyesno(
-            "Xác nhận đã đăng",
-            "Bạn đã đăng đúng thiết kế này trên "
-            + PLATFORMS[platform] + " và kiểm tra trong tài khoản người bán?",
-        ):
-            self._run("Đang xác nhận trạng thái đăng bán...",
-                      mark_uploaded, entry["id"], platform, confirmed=True)
-
-    def export(self) -> None:
-        target = filedialog.asksaveasfilename(
-            title="Xuất danh sách đã duyệt",
-            defaultextension=".csv", filetypes=[("CSV", "*.csv")],
-            initialfile=f"podbot-{self.platform.get()}-approved.csv",
-        )
-        if target:
-            try:
-                n = export_csv(Path(target), self.platform.get())
-            except (OSError, ValueError, RuntimeError) as exc:
-                messagebox.showerror("Không xuất được dữ liệu", str(exc))
-                return
-            messagebox.showinfo("Xuất CSV thành công",
-                                f"Đã xuất {n} thiết kế đã duyệt.")
-
-    def edit_blocklist(self) -> None:
-        path = data_directory() / "blocklist.txt"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            path.write_text(
-                "# Mỗi dòng là một từ khóa cần rà soát, không phải dữ liệu nhãn hiệu chính thức.\n",
-                encoding="utf-8",
-            )
-        self._open_file(path)
 
 
 def main() -> None:

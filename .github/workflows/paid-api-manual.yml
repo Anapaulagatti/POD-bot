@@ -1,0 +1,46 @@
+name: Paid provider one-shot verification (manual, optional)
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Paid provider model ID from POD-bot catalog
+        required: true
+        default: openai-flare
+        type: choice
+        options:
+          - openai-flare
+          - openai-sunburst
+      confirmation:
+        description: "Type YES_I_ACCEPT_POTENTIAL_CHARGES to permit exactly one paid generation attempt"
+        required: true
+        default: "NO"
+        type: string
+permissions:
+  contents: read
+jobs:
+  verify-paid:
+    if: inputs.confirmation == 'YES_I_ACCEPT_POTENTIAL_CHARGES'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install hash-locked dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip install --require-hashes -r requirements/windows-py312.lock.txt
+          python -m pip install --no-deps --no-build-isolation -e .
+      - name: Run exactly one paid provider probe (explicitly opted in)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PODBOT_PAID_CALLS_PER_DAY: "1"
+          PODBOT_LIVE_TEST_APPROVED: "YES_I_ACCEPT_POTENTIAL_CHARGES"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          python scripts/live_paid_probe.py --provider "${{ inputs.provider }}" --live

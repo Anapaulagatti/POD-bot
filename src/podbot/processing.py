@@ -215,6 +215,7 @@ def process_stored_design(design_id: str, options: ProcessOptions,
                 platform: [c.to_dict() for c in audit_image(processed, platform)]
                 for platform in ("redbubble", "teepublic")
             }
+        record.pop("ocr_cache", None)
         record["print_file"] = str(target.resolve())
         record["output_size"] = list(options.target_size)
         record["processing"] = details
