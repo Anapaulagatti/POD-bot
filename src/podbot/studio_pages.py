@@ -328,6 +328,7 @@ class StudioPages:
             ("Xử lý lại ảnh", self.process_image),
             ("Xem màu áo", self.preview_colors),
             ("Mockup áo thun", self.preview_shirt),
+            ("Xuất SVG (VTracer)", self.export_svg),
         )):
             self._button(edits, title, cmd, width=130).grid(
                 row=index // 3, column=index % 3, sticky="ew",
