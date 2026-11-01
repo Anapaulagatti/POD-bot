@@ -46,7 +46,7 @@ def parse_image_offers(payload: list | dict) -> tuple[ImageOffer, ...]:
     else:
         data = payload
     if not isinstance(data, list):
-        raise ValueError("Pollinations model listing shape is not recognized.")
+        raise TypeError("Pollinations model listing shape is not recognized.")
     found: dict[str, ImageOffer] = {}
     for entry in data[:500]:
         if not isinstance(entry, dict):
