@@ -69,7 +69,6 @@ def test_public_catalog_refresh_is_cached_and_never_sends_credentials(monkeypatc
 
 
 def test_public_catalog_rejects_redirect_or_truncated_body(monkeypatch):
-    from podbot import auth_transport
     real = auth_transport.open_authenticated
     with pytest.raises(ValueError, match="unapproved"):
         real(urllib.request.Request("https://gen.pollinations.ai.evil.test/models"),
