@@ -29,7 +29,7 @@ def setup_design(tmp_path):
 
 
 def test_vectorize_cpu_caps_input_and_does_not_change_manifest(monkeypatch, tmp_path):
-    identifier, folder, record, tool = setup_design(tmp_path)
+    identifier, folder, _record, tool = setup_design(tmp_path)
     before = (folder / "manifest.json").read_bytes()
     calls = []
 
@@ -70,7 +70,7 @@ def test_vector_export_rejects_svg_active_content(monkeypatch, tmp_path, payload
 
 
 def test_invalid_config_fails_before_executing_tool(monkeypatch, tmp_path):
-    identifier, folder, _, tool = setup_design(tmp_path)
+    identifier, _folder, _, tool = setup_design(tmp_path)
     monkeypatch.setattr("podbot.vector_export.subprocess.run",
                         lambda *_args, **_kwargs: pytest.fail("untrusted executable"))
     for kwargs in ({"max_colors": 8}, {"max_colors": 1}, {"max_colors": True}):
