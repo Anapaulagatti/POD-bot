@@ -92,20 +92,27 @@ def set_discovered_models(vendor: str, discovered) -> list[ModelSpec]:
             LABELS.pop(value.label, None)
             _DISCOVERED.pop(key, None)
     results = []
-    keys = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}
+    keys = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY",
+            "cloudflare": "CLOUDFLARE_API_TOKEN", "replicate": "REPLICATE_API_TOKEN"}
     if vendor not in keys:
         return []
     for item in discovered:
         if not item.compatible:
             continue
         model = item.id
-        if not re.fullmatch(r"[A-Za-z0-9._-]{2,100}", model):
+        if not re.fullmatch(r"@?[A-Za-z0-9][A-Za-z0-9_./-]{1,130}", model):
             continue
         if vendor == "openai" and not model.startswith("gpt-image-"):
             continue
         if vendor == "gemini" and not (
             "image" in model.casefold() or "banana" in model.casefold()
         ):
+            continue
+        if vendor == "replicate" and model not in {
+            "black-forest-labs/flux-schnell", "black-forest-labs/flux-dev"
+        }:
+            continue
+        if vendor == "cloudflare" and model != "@cf/black-forest-labs/flux-1-schnell":
             continue
         identifier = f"discovered:{vendor}:{model}"
         label = f"{vendor.upper()} · {model} (đã liệt kê, chưa test tạo ảnh)"
