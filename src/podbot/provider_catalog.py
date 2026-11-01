@@ -22,7 +22,7 @@ from PIL import Image
 
 from podbot.api_limits import reserve_paid_request
 from podbot.auth_transport import open_authenticated
-from podbot.free_api_radar import refresh_public_catalog
+from podbot.free_api_radar import refresh_public_catalog, verify_quest_only_key
 from podbot.providers import CloudflareFluxProvider, HuggingFaceProvider
 
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
@@ -117,7 +117,7 @@ def set_discovered_models(vendor: str, discovered) -> list[ModelSpec]:
         if not item.compatible:
             continue
         model = item.id
-        if not re.fullmatch(r"@?[A-Za-z0-9][A-Za-z0-9_./-]{1,130}", model):
+        if not re.fullmatch(r"@?[A-Za-z0-9][A-Za-z0-9_./:-]{1,130}", model):
             continue
         if vendor == "openai" and not model.startswith("gpt-image-"):
             continue
@@ -326,12 +326,11 @@ class PollinationsImage:
     name: str = "pollinations-image"
 
     def validate_request(self) -> None:
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]{2,130}", self.model):
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./:-]{2,130}", self.model):
             raise ValueError("Invalid Pollinations image model ID.")
         if "/" not in self.model:
             raise ValueError("Pollinations requires a canonical publisher/model ID.")
-        if not self.key.startswith("sk_"):
-            raise ValueError("Enter your own scoped Pollinations secret key (sk_).")
+        verify_quest_only_key(self.key)
         # Recheck advertised free-credit eligibility immediately before a
         # potentially billed request. Metadata may change during the 6h UI
         # catalog cache. This GET never sends a key or reserves daily quota.
