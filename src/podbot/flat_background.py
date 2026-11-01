@@ -12,6 +12,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageMath, ImageOps
 def remove_flat_background(
     image: Image.Image, *, tolerance: int = 25, feather: float = 0.65,
     scan_max: int = 768,
+    chroma_key: tuple[int, int, int] | None = None,
 ) -> Image.Image:
     """Return cutout, fail closed on gradients, existing alpha or ambiguous edges."""
     if not 4 <= tolerance <= 65:
@@ -20,6 +21,11 @@ def remove_flat_background(
         raise ValueError("Feather radius must be between 0 and 2.")
     if not 128 <= scan_max <= 1024:
         raise ValueError("Scan size must be between 128 and 1024.")
+    if chroma_key is not None and (
+        not isinstance(chroma_key, tuple) or len(chroma_key) != 3
+        or any(type(value) is not int or not 0 <= value <= 255 for value in chroma_key)
+    ):
+        raise ValueError("Chroma key must be an RGB tuple of bytes.")
     if min(image.size) < 16 or image.width * image.height > 50_000_000:
         raise ValueError("Image dimensions are not suitable for flat cutout.")
     rgba = ImageOps.exif_transpose(image).convert("RGBA")
@@ -30,6 +36,36 @@ def remove_flat_background(
     corners = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
     colors = [small.getpixel(point) for point in corners]
     base = tuple(round(sum(rgb[channel] for rgb in colors) / 4) for channel in range(3))
+    if chroma_key is not None:
+        # The builder knows the intended key. Uniform darkened corners can agree
+        # with each other while differing sharply from that color (vignette).
+        if any(max(abs(rgb[i] - chroma_key[i]) for i in range(3)) > tolerance + 15
+               for rgb in colors):
+            raise ValueError(
+                "Chroma corner colors diverge from the selected key (possible vignette)."
+            )
+        # Check two inset perimeter rings as well, not just four corners.
+        # A model-produced vignette can otherwise leave opaque colored bands.
+        points = []
+        for fraction in (0.03, 0.08):
+            xx = min(w - 1, max(0, round((w - 1) * fraction)))
+            yy = min(h - 1, max(0, round((h - 1) * fraction)))
+            for index in range(24):
+                x = round(index * (w - 1) / 23)
+                y = round(index * (h - 1) / 23)
+                points.extend(((x, yy), (x, h - 1 - yy),
+                               (xx, y), (w - 1 - xx, y)))
+        matches = sum(
+            max(abs(small.getpixel(point)[i] - chroma_key[i])
+                for i in range(3)) <= tolerance + 15 for point in points
+        )
+        if matches / len(points) < 0.92:
+            raise ValueError(
+                "Chroma background varies across inset edges (possible vignette); "
+                "manual review required."
+            )
+        base = chroma_key
+
     def distance(rgb: tuple[int, int, int]) -> int:
         return max(abs(rgb[channel] - base[channel]) for channel in range(3))
     if any(distance(rgb) > max(12, tolerance // 2) for rgb in colors):
@@ -70,8 +106,18 @@ def remove_flat_background(
     alpha = ImageChops.darker(hard_full, soft_full)
     if not alpha.getbbox():
         raise ValueError("The cutout would remove all artwork.")
-    rgba.putalpha(alpha)
-    _decontaminate_edges(rgba, alpha, base)
+    if chroma_key is not None:
+        # The matte was inferred from color differences, so it is not a
+        # trustworthy physical coverage fraction for algebraic decontamination.
+        # Trim the outermost pixel, then borrow clean RGB from opaque interior.
+        alpha = alpha.filter(ImageFilter.MinFilter(3))
+        if not alpha.getbbox():
+            raise ValueError("Chroma refinement removed all visible artwork.")
+        rgba.putalpha(alpha)
+        _fill_chroma_fringe_from_core(rgba, alpha)
+    else:
+        rgba.putalpha(alpha)
+        _decontaminate_edges(rgba, alpha, base)
     return rgba
 
 
@@ -102,3 +148,52 @@ def _decontaminate_edges(
                 ).convert("L")
                 corrected.append(channel)
             rgba.paste(Image.merge("RGBA", (*corrected, mask)), (x, y))
+
+
+def _fill_chroma_fringe_from_core(rgba: Image.Image, alpha: Image.Image) -> None:
+    """Repair a narrow chroma fringe from opaque interior colors, in small tiles.
+
+    The color model is a weighted blur of an eroded opaque core, NOT an
+    inversion of the estimated matte. No distant pixels are inpainted.
+    """
+    tile_size = 512
+    padding = 12
+    for top in range(0, rgba.height, tile_size):
+        for left in range(0, rgba.width, tile_size):
+            right = min(left + tile_size, rgba.width)
+            bottom = min(top + tile_size, rgba.height)
+            extended = (
+                max(0, left - padding), max(0, top - padding),
+                min(rgba.width, right + padding), min(rgba.height, bottom + padding),
+            )
+            tile_alpha = alpha.crop(extended)
+            opaque = tile_alpha.point(lambda value: 255 if value >= 245 else 0)
+            core = opaque.filter(ImageFilter.MinFilter(5))
+            if not core.getbbox():
+                continue  # No reliable interior color: do not invent one.
+            near_edge = ImageOps.invert(
+                tile_alpha.point(lambda value: 255 if value >= 250 else 0)
+            ).filter(ImageFilter.MaxFilter(9))
+            if not near_edge.getbbox():
+                continue
+            # Only alter RGB where artwork is visible, never an untouched core.
+            visible = tile_alpha.point(lambda value: 255 if value > 0 else 0)
+            near_edge = ImageChops.multiply(near_edge, visible)
+            weights = core.filter(ImageFilter.GaussianBlur(2.3))
+            safe = weights.point(lambda value: max(1, value))
+            red, green, blue = rgba.crop(extended).convert("RGB").split()
+            repaired = []
+            for channel in (red, green, blue):
+                weighted = ImageChops.multiply(channel, core)
+                blurred = weighted.filter(ImageFilter.GaussianBlur(2.3))
+                estimated = ImageMath.lambda_eval(
+                    lambda p: (p["color"] * 255) / p["weight"],
+                    color=blurred, weight=safe,
+                ).convert("L")
+                repaired.append(Image.composite(estimated, channel, near_edge))
+            adjusted = Image.merge("RGBA", (*repaired, tile_alpha))
+            crop = (
+                left - extended[0], top - extended[1],
+                right - extended[0], bottom - extended[1],
+            )
+            rgba.paste(adjusted.crop(crop), (left, top))
