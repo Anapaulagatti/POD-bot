@@ -69,7 +69,7 @@ def test_halo_inspection_and_realistic_offwhite_shadow(tmp_path):
     assert inspect_halo(halo).warning
     result = create_fabric_preview(img, tmp_path / "three-shirts.png")
     with Image.open(result) as preview:
-        assert preview.width == 900 and preview.height == 300
+        assert preview.width == 1560 and preview.height == 520
 
 
 def test_optional_ocr_fails_closed_without_program(monkeypatch):
