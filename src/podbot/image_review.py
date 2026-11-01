@@ -38,7 +38,7 @@ def inspect_halo(image: Image.Image, *, threshold: float = 0.35) -> HaloReport:
     """Measure pale, partially transparent fringe as a review hint, not a verdict."""
     if not 0 <= threshold <= 1:
         raise ValueError("Invalid halo threshold.")
-    sample = ImageOps.contain(image.convert("RGBA"), (800, 800))
+    sample = ImageOps.contain(image, (800, 800), Image.Resampling.LANCZOS).convert("RGBA")
     rgba = sample.tobytes()
     partial = bright = 0
     for i in range(0, len(rgba), 4):
