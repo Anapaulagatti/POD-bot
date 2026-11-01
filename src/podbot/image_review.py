@@ -96,9 +96,10 @@ def review_ocr(
             "Words detected even though the prompt requested no text.",
         ))
     if expected_text:
-        normalize = lambda value: " ".join(
-            unicodedata.normalize("NFKC", value).casefold().split()
-        )
+        def normalize(value: str) -> str:
+            return " ".join(
+                unicodedata.normalize("NFKC", value).casefold().split()
+            )
         if normalize(expected_text) not in normalize(text):
             output.append(Check(
                 "ocr_expected_text", "warn", text[:140] or "nothing recognized",
