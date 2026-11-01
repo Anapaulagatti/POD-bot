@@ -29,8 +29,10 @@ jobs:
           if (!(Test-Path "dist/PODBot/PODBot.exe")) { throw "Missing onedir EXE" }
           Compress-Archive -Path "dist/PODBot" -DestinationPath "dist/PODBot-windows-onedir.zip"
       - name: Build single-file EXE
+        if: github.event_name == 'workflow_dispatch'
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
       - name: Smoke-check Windows EXE output
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           if (!(Test-Path "dist/PODBot.exe")) { throw "Missing expected EXE" }
@@ -38,6 +40,7 @@ jobs:
           if ($file.Length -lt 1000000) { throw "EXE is unexpectedly small" }
           Write-Host "Built PODBot.exe bytes: $($file.Length)"
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: PODBot-windows-exe
           path: dist/PODBot.exe
