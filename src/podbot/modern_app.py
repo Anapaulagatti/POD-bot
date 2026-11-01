@@ -28,7 +28,7 @@ from podbot.pipeline import create_draft
 from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
 from podbot.storage import list_designs
 from podbot.studio_actions import StudioActions
-from podbot.studio_pages import StudioPages, model_options, status_label
+from podbot.studio_pages import StudioPages, model_options as model_options, status_label
 from podbot.studio_theme import (
     ACCENT,
     ACCENT_HOVER,
