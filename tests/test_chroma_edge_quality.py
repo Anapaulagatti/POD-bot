@@ -21,7 +21,7 @@ def _disc(key: tuple[int, int, int], *, size: int = 224) -> Image.Image:
 
 
 def _edge_contamination(image: Image.Image) -> tuple[int, float]:
-    pixels = image.convert("RGBA").getdata()
+    pixels = image.convert("RGBA").get_flattened_data()
     # Use partially transparent pixels containing actual artwork.
     fringe = [(r, g, b) for r, g, b, a in pixels if 10 < a < 250]
     if not fringe:
