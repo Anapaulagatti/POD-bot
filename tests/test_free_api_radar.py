@@ -264,7 +264,8 @@ def test_catalog_requires_exact_image_endpoint_and_image_modality():
 
 def test_default_auto_catalog_refresh_is_off():
     from pathlib import Path
-    import podbot.modern_app as modern_app
+
+    from podbot import modern_app
 
     source = Path(modern_app.__file__).read_text(encoding="utf-8")
     assert "self.free_catalog_autoupdate = tk.BooleanVar(value=False)" in source
