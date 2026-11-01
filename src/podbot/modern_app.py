@@ -469,7 +469,7 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                 f"Pollinations: {len(snapshot.offers)} model có metadata, "
                 f"{len(quest)} model có thể dùng Quest Pollen và adapter tạo ảnh, "
                 f"{paid} model paid-only. KHÔNG có nghĩa $0 hoặc key đã đủ quyền.\n"
-                "Muốn thử: nhập sk_ riêng, đặt budget/paid Pollen = 0 ở dashboard, "
+                "Muốn thử: tạo sk_ với questPollenOnly=true và budget thấp, "
                 "chọn Pollinations ở trên rồi bấm Kiểm tra key + tải model. "
                 "Mọi lần tạo ảnh đều cần xác nhận và dùng giới hạn ngày."
             )
