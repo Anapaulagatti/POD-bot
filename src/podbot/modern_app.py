@@ -82,7 +82,7 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
 
         self.model = tk.StringVar(value="Hãy kiểm tra API key trong Cài đặt")
         self.api_discovery_vendor = tk.StringVar(value="openai")
-        self.free_catalog_autoupdate = tk.BooleanVar(value=True)
+        self.free_catalog_autoupdate = tk.BooleanVar(value=False)
         self.free_catalog_last_check = 0.0
         self.verified_provider_keys: dict[str, str] = {}
         self.verified_model_choices: dict[str, set[str]] = {}
@@ -523,7 +523,7 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             message += "\nKhông thấy model phù hợp trong trang đã kiểm tra."
         if result.provider == "pollinations":
             message += (
-                "\nPollinations có thể trừ Quest/Paid Pollen khi thử ảnh. "
+                "\nPollinations thử nghiệm: chỉ nhận key questPollenOnly=true. Mỗi ảnh trừ Quest Pollen. "
                 "Hãy đặt giới hạn budget trên secret key và dùng SEO offline."
             )
         if result.provider in ("replicate", "cloudflare"):
