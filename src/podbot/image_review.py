@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,7 +68,8 @@ def create_fabric_preview(image: Image.Image, destination: Path) -> Path:
 
 
 def review_ocr(
-    report: OCRReport, blocked_terms: list[str], *, prompt: str = ""
+    report: OCRReport, blocked_terms: list[str], *,
+    prompt: str = "", expected_text: str = ""
 ) -> list[Check]:
     """Advisory OCR + hard block only for recognized exact blocklist phrases."""
     if not report.available:
@@ -93,6 +95,16 @@ def review_ocr(
             "ocr_unexpected_text", "warn", text[:140],
             "Words detected even though the prompt requested no text.",
         ))
+    if expected_text:
+        normalize = lambda value: " ".join(
+            unicodedata.normalize("NFKC", value).casefold().split()
+        )
+        if normalize(expected_text) not in normalize(text):
+            output.append(Check(
+                "ocr_expected_text", "warn", text[:140] or "nothing recognized",
+                "Detected text does not match the requested original lettering. "
+                "Proofread the artwork manually before approval.",
+            ))
     return output
 
 
