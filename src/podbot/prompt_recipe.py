@@ -28,7 +28,7 @@ HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}\Z")
 
 def _single_line(value: str) -> str:
     if not isinstance(value, str):
-        raise ValueError("Prompt field must be text.")
+        raise TypeError("Prompt field must be text.")
     return " ".join(value.split())
 
 
@@ -46,13 +46,13 @@ class PromptRecipe:
     @classmethod
     def from_dict(cls, payload: dict) -> PromptRecipe:
         if not isinstance(payload, dict):
-            raise ValueError("Prompt recipe must be an object.")
+            raise TypeError("Prompt recipe must be an object.")
         allowed = set(cls.__dataclass_fields__)
         if set(payload) - allowed:
             raise ValueError("Unknown prompt recipe fields.")
         colors = payload.get("colors", cls.__dataclass_fields__["colors"].default)
         if not isinstance(colors, (list, tuple)):
-            raise ValueError("Palette must be a list of HEX colors.")
+            raise TypeError("Palette must be a list of HEX colors.")
         try:
             return cls(**{**payload, "colors": tuple(colors)})
         except TypeError as exc:
