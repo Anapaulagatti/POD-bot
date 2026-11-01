@@ -358,7 +358,7 @@ class PollinationsImage:
             raise RuntimeError("Pollinations did not return image data (no paid retry).")
         encoded = images[0].get("b64_json")
         if not isinstance(encoded, str):
-            raise RuntimeError("Pollinations image output format not supported; no retry.")
+            raise TypeError("Pollinations image output format not supported; no retry.")
         return _decode(encoded)
 
 
