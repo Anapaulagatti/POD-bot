@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 import queue
+import time
 import threading
 import tkinter as tk
 import webbrowser
@@ -21,6 +22,7 @@ from PIL import Image
 from podbot.api_limits import get_daily_limit, set_daily_limit
 from podbot.audit import find_blocked_terms, get_blocklist, make_color_preview
 from podbot.credential_vault import erase_credentials, remember_credentials, restore_credentials
+from podbot.free_api_radar import REFRESH_SECONDS, CatalogSnapshot, refresh_public_catalog
 from podbot.importer import import_design
 from podbot.job_queue import JobQueue
 from podbot.mockups import create_shirt_mockup
@@ -80,6 +82,8 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
 
         self.model = tk.StringVar(value="Hãy kiểm tra API key trong Cài đặt")
         self.api_discovery_vendor = tk.StringVar(value="openai")
+        self.free_catalog_autoupdate = tk.BooleanVar(value=True)
+        self.free_catalog_last_check = 0.0
         self.verified_provider_keys: dict[str, str] = {}
         self.verified_model_choices: dict[str, set[str]] = {}
         self.manual_models_enabled = False
@@ -111,6 +115,7 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                 "REPLICATE_API_TOKEN",
                 "FAL_KEY",
                 "STABILITY_API_KEY",
+                "POLLINATIONS_API_KEY",
             )
         }
         try:
@@ -240,6 +245,10 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             )
         if key in {"library", "overview"}:
             self.refresh()
+        if (key == "settings" and self.free_catalog_autoupdate.get()
+                and not self.busy
+                and time.time() - self.free_catalog_last_check >= REFRESH_SECONDS):
+            self.refresh_free_api_radar()
 
     def _section(self, parent, title: str, description: str) -> None:
         self._label(parent, title, 27, bold=True).pack(anchor="w", padx=9, pady=(13, 4))
@@ -412,6 +421,8 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                     self.message.set("✓  Đã hoàn tất. Dữ liệu được lưu trên máy.")
                     if isinstance(result, dict) and "_model_discovery" in result:
                         self._apply_discovery(result)
+                    if isinstance(result, CatalogSnapshot):
+                        self._show_free_api_radar(result)
                     if isinstance(result, dict) and "_job_inspection" in result:
                         messagebox.showinfo("Kiểm tra ảnh + OCR", result["_job_inspection"])
                     self.refresh()
@@ -440,6 +451,30 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         key = credentials.get(PROVIDER_KEYS[provider], "").strip()
         account = credentials.get("CLOUDFLARE_ACCOUNT_ID", "") if provider == "cloudflare" else ""
         return hashlib.sha256((provider + "\0" + account + "\0" + key).encode()).hexdigest()
+
+    def refresh_free_api_radar(self) -> None:
+        """Catalog metadata only: public GET, no secret, no model installation."""
+        if self.busy:
+            return
+        def work():
+            return refresh_public_catalog(force=True)
+        self._run("Đang kiểm tra danh mục API công khai...", work)
+
+    def _show_free_api_radar(self, snapshot: CatalogSnapshot) -> None:
+        self.free_catalog_last_check = snapshot.fetched_at
+        quest = [offer for offer in snapshot.offers if offer.image_adapter]
+        paid = sum(offer.access == "paid-only" for offer in snapshot.offers)
+        self.free_radar_status.configure(
+            text=(
+                f"Pollinations: {len(snapshot.offers)} model có metadata, "
+                f"{len(quest)} model có thể dùng Quest Pollen và adapter tạo ảnh, "
+                f"{paid} model paid-only. KHÔNG có nghĩa $0 hoặc key đã đủ quyền.\n"
+                "Muốn thử: nhập sk_ riêng, đặt budget/paid Pollen = 0 ở dashboard, "
+                "chọn Pollinations ở trên rồi bấm Kiểm tra key + tải model. "
+                "Mọi lần tạo ảnh đều cần xác nhận và dùng giới hạn ngày."
+            )
+        )
+        self.message.set("Đã làm mới metadata công khai; không tạo ảnh, không trừ credit.")
 
     def check_provider_models(self) -> None:
         if self.busy:
@@ -486,6 +521,11 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             message += f"\n{len(found)} model tương thích được liệt kê, không thêm mục trùng."
         else:
             message += "\nKhông thấy model phù hợp trong trang đã kiểm tra."
+        if result.provider == "pollinations":
+            message += (
+                "\nPollinations có thể trừ Quest/Paid Pollen khi thử ảnh. "
+                "Hãy đặt giới hạn budget trên secret key và dùng SEO offline."
+            )
         if result.provider in ("replicate", "cloudflare"):
             message += (
                 "\nDanh sách API có thể chưa đầy đủ. Preset vẫn có thể chọn "
