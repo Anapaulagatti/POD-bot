@@ -417,6 +417,13 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                     if isinstance(result, dict) and "id" in result:
                         self.selected_id = result["id"]
                         self.refresh()
+                    if isinstance(result, Path) and result.suffix == ".svg":
+                        self.message.set("Đã xuất SVG để kiểm tra: " + str(result))
+                        messagebox.showinfo(
+                            "SVG đã tạo (cần duyệt)",
+                            f"File: {result}\nHãy xem lại đường nét, chữ và giấy phép "
+                            "trước khi sử dụng. PNG đã duyệt bán không thay đổi.",
+                        )
                     if isinstance(result, list):
                         self._show_trends(result)
                 else:
