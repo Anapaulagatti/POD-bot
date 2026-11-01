@@ -475,11 +475,49 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                 anchor="w", padx=14, pady=(10, 2),
             )
             self._label(row, f"Lượt quan tâm: {trend.approx_traffic}  ·  {trend.published}",
-                        10, fg=MUTED).pack(anchor="w", padx=14, pady=(0, 8))
+                        10, fg=MUTED).pack(anchor="w", padx=14, pady=(0, 6))
+            keywords = ", ".join(trend.keywords[:8]) or "Chưa có từ khóa đủ tin cậy"
+            self._label(row, f"Gợi ý từ khóa RSS: {keywords}",
+                        11, fg=WHITE, wraplength=670, justify="left").pack(
+                anchor="w", padx=14, pady=(0, 6),
+            )
+            if trend.news_titles:
+                self._label(row, f"Bài báo liên quan: {trend.news_titles[0]}",
+                            10, fg=MUTED, wraplength=680, justify="left").pack(
+                    anchor="w", padx=14, pady=(0, 5),
+                )
+            controls = ctk.CTkFrame(row, fg_color="transparent")
+            controls.pack(anchor="e", padx=12, pady=(0, 10))
             self._button(
-                row, "Sao chép chủ đề",
-                lambda topic=trend.title: self._copy(topic), width=152,
-            ).pack(anchor="e", padx=12, pady=(0, 10))
+                controls, "Sao chép từ khóa",
+                lambda terms=trend.keywords: self._copy(", ".join(terms)), width=147,
+            ).pack(side="left", padx=4)
+            self._button(
+                controls, "Dùng chủ đề + từ khóa",
+                lambda selected=trend: self._use_trend(selected), width=180,
+            ).pack(side="left", padx=4)
+
+    def _use_trend(self, trend) -> None:
+        if not trend.keywords:
+            messagebox.showinfo("Thiếu từ khóa", "Không có từ khóa đáng tin từ RSS.")
+            return
+        if find_blocked_terms(" ".join((trend.title, *trend.keywords)), get_blocklist()):
+            messagebox.showwarning(
+                "Từ khóa cần rà soát",
+                "Xu hướng có từ khóa trong blocklist, không tự đưa vào mẫu thiết kế.",
+            )
+            return
+        if not messagebox.askyesno(
+            "Chuyển vào mẫu thiết kế",
+            "Đây là từ khóa gợi ý từ tiêu đề RSS/bài báo, KHÔNG phải Related Queries "
+            "được Google xác nhận. Xu hướng có thể chứa thương hiệu hoặc người thật.\n"
+            "Bạn phải rà soát quyền thương mại và viết prompt riêng. Tiếp tục?",
+        ):
+            return
+        self.niche.set(trend.title)
+        self.keywords.set(", ".join(trend.keywords[:8]))
+        self.show_page("create")
+        self.message.set("Đã điền chủ đề và từ khóa. Chưa phát sinh yêu cầu AI hay phí API.")
 
     def _copy(self, value: str) -> None:
         self.clipboard_clear()
