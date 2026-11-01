@@ -12,6 +12,7 @@ from PIL import Image
 
 from podbot.audit import audit_image, find_blocked_terms, fingerprint, get_blocklist
 from podbot.processing import compose_print
+from podbot.prompt_recipe import PromptRecipe, build_prompt, recipe_sha256
 from podbot.prompting import prepare_image_prompt
 from podbot.providers import ImageProvider
 from podbot.seo import SEOMetadata, gemini_seo, local_seo
@@ -40,12 +41,20 @@ def create_draft(
     gemini_key: str = "",
     root: Path | None = None,
     *, flat_background_prompt: bool = False,
+    prompt_recipe: dict | None = None,
 ) -> dict:
     prompt = prompt.strip()
     if len(prompt) < 5:
         raise ValueError("Please enter a descriptive prompt (minimum 5 characters).")
     if seo_mode not in {"local", "gemini"}:
         raise ValueError("Unknown SEO mode.")
+    recipe = PromptRecipe.from_dict(prompt_recipe).validated() if prompt_recipe is not None else None
+    if recipe is not None:
+        if build_prompt(recipe) != prompt:
+            raise ValueError("Structured prompt differs from its recipe; rebuild before generating.")
+        if flat_background_prompt and recipe.background == "transparent":
+            raise ValueError("Transparent background conflicts with the flat white suffix.")
+
     blocked = find_blocked_terms(f"{prompt} {niche} {keywords}", get_blocklist())
     if blocked:
         raise ValueError("blocklist requires review: " + ", ".join(blocked[:5]))
@@ -73,6 +82,9 @@ def create_draft(
             "created_at": datetime.now(UTC).isoformat(),
             "prompt": prompt,
             "prompt_sent": image_prompt,
+            "prompt_sent_sha256": hashlib.sha256(image_prompt.encode("utf-8")).hexdigest(),
+            "prompt_recipe": recipe.to_manifest() if recipe is not None else None,
+            "prompt_recipe_sha256": recipe_sha256(recipe) if recipe is not None else None,
             "flat_background_prompt": flat_background_prompt,
             "niche": niche.strip(),
             "keywords": keywords.strip(),
