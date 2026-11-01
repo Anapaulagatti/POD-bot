@@ -90,7 +90,8 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self.recipe_style = tk.StringVar(value="minimal-vector")
         self.recipe_layout = tk.StringVar(value="centered")
         self.recipe_palette = tk.StringVar(value="#123047, #F4AC45, #F5F0DE")
-        self.recipe_background = tk.StringVar(value="transparent")
+        self.recipe_background = tk.StringVar(value="chroma-magenta")
+        self.recipe_background_auto = True
         self.recipe_lettering = tk.StringVar(value="none")
         self.recipe_text = tk.StringVar(value="")
         self._built_recipe: dict | None = None
@@ -527,6 +528,21 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                 text_rule=self.recipe_lettering.get(),
                 original_text=self.recipe_text.get(),
             ).validated()
+            spec_id = LABELS.get(self.model.get())
+            if recipe.background == "transparent":
+                capability = get_spec(spec_id).alpha_capability if spec_id else "unknown"
+                detail = (
+                    "Adapter sẽ yêu cầu PNG alpha, nhưng chưa xác minh bằng API thật."
+                    if capability == "requested-unverified" else
+                    "Model này chưa được xác minh có thể xuất kênh alpha thật. "
+                    "Nền caro hoặc nền đặc sẽ không được tự động chuyển thành trong suốt."
+                )
+                if not messagebox.askyesno(
+                    "Nền trong suốt chưa xác minh",
+                    detail + "\n\nNên dùng chroma-magenta hoặc chroma-green cho "
+                    "máy yếu. Bạn vẫn muốn dựng prompt với nền trong suốt?",
+                ):
+                    return
             assembled = build_prompt(recipe)
         except ValueError as exc:
             messagebox.showwarning("Cấu hình prompt chưa hợp lệ", str(exc))
