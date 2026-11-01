@@ -33,9 +33,10 @@ def test_all_enclosed_chroma_holes_are_transparent(key, make_art):
     assert output.getpixel((0, 0))[3] == 0
     assert output.getpixel((120, 81))[3] == 0
     assert output.getpixel((120, 160))[3] == 0
-    assert output.getpixel((60, 120))[3] > 190
+    stroke_x = 48 if make_art is ring_art else 60
+    assert output.getpixel((stroke_x, 120))[3] > 190
     # A neutral opaque subject must not turn magenta or green around inner edges.
-    for r, g, b, a in output.getdata():
+    for r, g, b, a in output.get_flattened_data():
         if a > 16 and 0 < r < 200 and 0 < g < 200 and 0 < b < 200:
             assert max(r, g, b) - min(r, g, b) <= 25 or make_art is badge_with_two_holes
 
