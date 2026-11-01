@@ -47,7 +47,7 @@ def test_approve_path_checks_blocked_text_in_pixels(monkeypatch, tmp_path):
     png = tmp_path / "art.png"
     Image.new("RGBA", (100, 100), (0, 0, 0, 0)).save(png)
     monkeypatch.setattr("podbot.publishing.audit_image", lambda *args: [])
-    monkeypatch.setattr("podbot.publishing.scan_ocr",
+    monkeypatch.setattr("podbot.ocr_cache.scan_ocr",
                         lambda image: OCRReport(True, "ACME Brand", "ok"))
     entry = {
         "print_file": str(png),
@@ -63,7 +63,7 @@ def test_ocr_does_not_break_approval_when_optional_engine_missing(monkeypatch, t
     png = tmp_path / "art.png"
     Image.new("RGBA", (100, 100), (0, 0, 0, 0)).save(png)
     monkeypatch.setattr("podbot.publishing.audit_image", lambda *args: [])
-    monkeypatch.setattr("podbot.publishing.scan_ocr",
+    monkeypatch.setattr("podbot.ocr_cache.scan_ocr",
                         lambda image: OCRReport(False, "", "Tesseract missing"))
     entry = {
         "print_file": str(png), "rights_confirmed_at": "confirmed",
