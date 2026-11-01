@@ -4,7 +4,7 @@ Audit date: 2026-11-01. Target baseline: `main` commit `006e9f3a`; fix branch: `
 
 ## Executive summary
 
-- **High, fixed in PR #9:** Authenticated API calls in `provider_catalog._call`, Stability and the Cloudflare adapter relied on `urllib.request.urlopen`, which may follow HTTP redirects. If an upstream redirect were returned, token-bearing headers could be forwarded to a different host. All three now use a shared, restricted HTTPS transport that rejects redirects. It checks the original destination against an exact known-host allowlist before any request.
+- **High, fixed in PR #9:** Authenticated API calls in `provider_catalog._call`, Stability, Cloudflare **and Gemini SEO (`seo.py`)** used redirect-following `urllib.request.urlopen`. A redirect could forward sensitive headers. These routes now share a restricted HTTPS transport that rejects redirects and validates an exact host allowlist before connecting. Gemini SEO was found during follow-up adversarial review; it is explicitly regression-tested.
 - **High, fixed in PR #9:** Tagged Release built onedir and onefile without running the same native EXE/GUI smoke checks as pull-request CI. This risks a published non-starting ZIP or EXE even when unit tests pass. The release workflow now checks onedir smoke + GUI, and onefile smoke, before packaging and publication.
 - **Medium, already controlled:** Paid image API attempts are reserved atomically in SQLite, after local Gemini argument validation. Remote HTTP 400 and timeout attempts are *not* refunded to avoid silent repeated expenses. `paid-api-manual` is only manually dispatched with a typed consent value. The daily attempt count is not a USD charge limit.
 - **Medium, already controlled:** Model discovery is a read-only operation and does not prove billing, image entitlement, available credits or transparent image output. Invalid/unknown model options remain unverified until an explicitly approved live probe.
@@ -17,8 +17,14 @@ Audit date: 2026-11-01. Target baseline: `main` commit `006e9f3a`; fix branch: `
 
 1. Reject wrong-scheme, deceptive subdomain, credentials-in-URL, non-standard port and fragment in authenticated API URLs before networking.
 2. Refuse to forward an Authorization header through HTTP 3xx; never silently retry a billable generation request.
-3. Verify OpenAI/Cloudflare/Stability adapters route token-bearing requests via the approved transport.
+3. Verify OpenAI/Cloudflare/Stability/**Gemini SEO** route token-bearing requests via the approved transport. An AST-based source gate prevents reintroduction of raw `urllib.request.urlopen` outside reviewed, unauthenticated public Trends RSS.
 4. Verify release workflow checks both native binary formats before any public GitHub release action, and paid-provider workflow retains user opt-in.
+
+## Explicit third-party and discovery boundaries
+
+- **Hugging Face inference remains outside this transport:** `HuggingFaceProvider` uses the separately maintained `huggingface_hub.InferenceClient`. Its redirects, endpoints and auth-header behavior have **not** been security-tested in this audit. Avoid claiming it is covered; perform a separate pinned-version audit before treating it as hardened.
+- **Model discovery uses its own no-redirect handler:** `model_discovery._get_json` uses a request-only GET opener with `_NoRedirect`, and its model and identity URLs are fixed by the app. It is not yet consolidated into `auth_transport`; any consolidation must account for the separate `huggingface.co` identity URL and must preserve strict redirect refusal.
+- **Static scan coverage:** `tests/test_seo_secure_transport.py` inspects Python syntax for direct `urllib.request.urlopen` outside `trends.py`. This catches a known easy-to-miss regression, but is not a general taint-analysis engine. Other HTTP libraries and aliasing require explicit source review.
 
 ## Verified skill sources and how we used them
 
