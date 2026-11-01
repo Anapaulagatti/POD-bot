@@ -5,9 +5,13 @@ on:
       - 'v*'
 permissions:
   contents: write
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   release-windows:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,12 +43,24 @@ jobs:
         run: |
           python -m pytest -q
           python -m compileall -q src
-          python -m ruff check src tests
+          python -m ruff check src tests scripts
       - name: Build Windows onedir
         shell: pwsh
         run: |
           python -m PyInstaller --noconfirm --clean --onedir --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
           if (!(Test-Path "dist/PODBot/PODBot.exe")) { throw "onedir EXE missing" }
+      - name: Verify native onedir EXE and GUI before release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $probe = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot\\PODBot.exe") -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($probe.ExitCode -ne 0) { throw "Release onedir smoke failed: $($probe.ExitCode)" }
+          $process = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot\\PODBot.exe") -PassThru
+          Start-Sleep -Seconds 4
+          $process.Refresh()
+          if ($process.HasExited) { throw "Release GUI stopped unexpectedly: $($process.ExitCode)" }
+          Stop-Process -Id $process.Id -Force
       - name: Archive onedir before second PyInstaller build
         shell: pwsh
         run: |
@@ -55,6 +71,14 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name PODBot --paths src --collect-all customtkinter --collect-submodules keyring.backends --collect-submodules huggingface_hub src/podbot/app.py
           if (!(Test-Path "dist/PODBot.exe")) { throw "onefile EXE missing" }
+      - name: Verify native onefile EXE before release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $probe = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot.exe") -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($probe.ExitCode -ne 0) { throw "Release onefile smoke failed: $($probe.ExitCode)" }
+          if ((Get-Item "dist/PODBot.exe").Length -lt 1000000) { throw "Onefile EXE unexpectedly small" }
       - name: Prepare assets and SHA256SUMS
         shell: pwsh
         run: |

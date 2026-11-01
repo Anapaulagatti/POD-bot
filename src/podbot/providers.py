@@ -13,6 +13,7 @@ from typing import Protocol
 
 from PIL import Image
 
+from podbot.auth_transport import open_authenticated
 from podbot.http_utils import CLOUDFLARE_JSON_LIMIT, read_limited_json
 
 
@@ -54,10 +55,10 @@ class CloudflareFluxProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with open_authenticated(request, timeout=120) as response:
                 result = read_limited_json(response, CLOUDFLARE_JSON_LIMIT)
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Cloudflare API returned HTTP {exc.code}.") from exc
+            raise RuntimeError(f"Cloudflare API returned HTTP {exc.code}.") from None
         if result.get("success") is False:
             raise RuntimeError("Cloudflare rejected the generation request. Check quota/token.")
         encoded = (result.get("result") or {}).get("image")

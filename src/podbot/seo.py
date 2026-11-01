@@ -10,6 +10,7 @@ import urllib.request
 from dataclasses import asdict, dataclass
 
 from podbot.api_limits import reserve_paid_request
+from podbot.auth_transport import open_authenticated
 from podbot.http_utils import read_limited_json
 
 
@@ -89,10 +90,10 @@ def gemini_seo(niche: str, keywords: str, prompt: str, api_key: str = "") -> SEO
     )
     reserve_paid_request("gemini")
     try:
-        with urllib.request.urlopen(request, timeout=90) as response:
+        with open_authenticated(request, timeout=90) as response:
             result = read_limited_json(response)
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Gemini SEO API returned HTTP {exc.code}.") from exc
+        raise RuntimeError(f"Gemini SEO API returned HTTP {exc.code}.") from None
     try:
         content = result["candidates"][0]["content"]["parts"][0]["text"]
         data = json.loads(content)
