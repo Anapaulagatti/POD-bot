@@ -24,13 +24,12 @@ jobs:
           git fetch origin main
           git merge-base --is-ancestor HEAD origin/main
           if ($LASTEXITCODE -ne 0) { throw "Only release commits on main." }
-      - name: Resolve Windows dependencies and save snapshot
+      - name: Install committed Windows hash-locked dependencies
         shell: pwsh
         run: |
-          python -m pip install "pip-tools>=7,<8" "pip-audit>=2.7,<4"
-          python -m piptools compile requirements/windows.in -o requirements-windows-py312.lock.txt
-          python -m pip install -r requirements-windows-py312.lock.txt
+          python -m pip install --require-hashes -r requirements/windows-py312.lock.txt
           python -m pip install --no-deps -e .
+          python -m pip check
       - name: Audit installed dependencies (fail closed)
         run: python -m pip_audit --local
       - name: Test and lint
@@ -58,7 +57,7 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item "dist/PODBot.exe" "release-assets/PODBot-$env:GITHUB_REF_NAME-windows-onefile.exe"
-          Copy-Item "requirements-windows-py312.lock.txt" "release-assets/requirements-windows-py312.lock.txt"
+          Copy-Item "requirements/windows-py312.lock.txt" "release-assets/requirements-windows-py312.lock.txt"
           $files = Get-ChildItem release-assets -File
           $lines = $files | ForEach-Object { $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(); "$hash  $($_.Name)" }
           $lines | Set-Content -Path "release-assets/SHA256SUMS.txt" -Encoding utf8
