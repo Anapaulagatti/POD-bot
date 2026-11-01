@@ -141,7 +141,9 @@ class StudioPages:
             ("PHONG CÁCH", self.recipe_style,
              ["minimal-vector", "line-art", "vintage-screenprint", "paper-cut"]),
             ("BỐ CỤC", self.recipe_layout, ["centered", "badge", "stacked"]),
-            ("NỀN", self.recipe_background, ["transparent", "flat-white"]),
+            ("NỀN", self.recipe_background, [
+                "chroma-magenta", "chroma-green", "flat-white", "transparent"
+            ]),
             ("QUY TẮC CHỮ", self.recipe_lettering, ["none", "original"]),
         )
         for index, (label, variable, choices) in enumerate(dropdowns):
@@ -152,7 +154,15 @@ class StudioPages:
             ctk.CTkOptionMenu(
                 panel, values=choices, variable=variable, height=34,
                 fg_color=BG, button_color=BORDER, text_color=WHITE,
+                command=(lambda _value: setattr(self, "recipe_background_auto", False))
+                if index == 2 else None,
             ).pack(fill="x")
+        self.recipe_background_note = self._label(
+            builder,
+            "Ưu tiên chroma: nền đặc dễ cắt bằng Pillow. Nền trong suốt tùy model.",
+            10, fg=WARNING, wraplength=680, justify="left",
+        )
+        self.recipe_background_note.pack(anchor="w", padx=13, pady=(8, 0))
         self._button(
             builder, "✦  Dựng prompt (0 phí API)", self.build_structured_prompt,
             width=245,
@@ -250,6 +260,19 @@ class StudioPages:
         model_id = LABELS.get(self.model.get())
         if model_id:
             spec = get_spec(model_id)
+            if self.recipe_background_auto:
+                self.recipe_background.set(
+                    "transparent" if spec.alpha_capability == "requested-unverified"
+                    else "chroma-magenta"
+                )
+            background_note = (
+                "OpenAI: adapter yêu cầu alpha, chưa test API thật. Nếu trả nền đặc, "
+                "chọn chroma để Pillow tách nền."
+                if spec.alpha_capability == "requested-unverified" else
+                "Model chưa xác minh alpha: nên dùng chroma-magenta / chroma-green "
+                "(tự tách nền bằng Pillow)."
+            )
+            self.recipe_background_note.configure(text=background_note)
             pricing = "Dịch vụ tính phí" if spec.paid else "Hạn mức / tín dụng có giới hạn"
             hint = spec.hint
             if spec.vendor == "gemini" and spec.model not in GEMINI_IMAGE_SIZE_MODELS:
