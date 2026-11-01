@@ -6,11 +6,18 @@ Phiên bản kỹ thuật `1.0.0rc3` (1.0 Preview 3). Đây là bản thử nghi
 
 ## Bắt đầu trong Windows
 
-1. Trên [GitHub Actions](https://github.com/Anapaulagatti/POD-bot/actions), chọn workflow thành công của nhánh `main`; tải `PODBot-windows-exe`, giải nén và chạy `PODBot.exe`.
+1. Trên [GitHub Actions](https://github.com/Anapaulagatti/POD-bot/actions), chọn workflow thành công của nhánh `main`; tải `PODBot-windows-onedir`, giải nén và chạy `PODBot/PODBot.exe`. Bản một-file được tạo khi chạy workflow thủ công hoặc phát hành bằng tag.
 2. Mở **Cài đặt API** nếu muốn tạo ảnh AI bằng Cloudflare, Hugging Face, Gemini, OpenAI, Replicate, fal.ai hoặc Stability AI. API key chỉ giữ trong RAM hoặc biến môi trường theo mặc định; có thể chủ động lưu vào kho khóa hệ điều hành.
 3. Mở **Sáng tạo AI**, chọn model, prompt và SEO. Với model tính phí, người dùng xác nhận trước; không tự chuyển model và không tự thử lại có phí. Hoặc chọn **Nhập ảnh từ máy**, không dùng API ảnh.
 4. Vào **Thư viện thiết kế**, kiểm tra file PNG, sửa SEO, tạo mockup và kiểm tra chất lượng in. Duyệt thương mại sau khi QC đạt và xác nhận quyền sử dụng.
 5. Mở trang sàn để tự đăng sản phẩm, sau đó bấm **Đã đăng** nếu thực sự đã kiểm tra trên tài khoản bán.
+
+## Kiểm tra mới và hàng đợi offline
+
+- Mở **Thư viện thiết kế → Hàng đợi** để xem, thử lại (nếu còn lượt) hoặc hủy tác vụ đang chờ. Khôi phục tác vụ offline bị ngắt sau khi khởi động lại; tác vụ có phí vẫn cần xác nhận riêng và không tự phát lại.
+- **Kiểm tra ảnh** bao gồm phát hiện viền sáng, QC và OCR offline nếu đã cài Tesseract. OCR không thay thế việc duyệt chữ/nhãn hiệu thủ công.
+- Cài Tesseract riêng và đặt `PODBOT_TESSERACT_PATH` nếu không có trong PATH. Không tải model OCR tự động.
+- Tham khảo [hướng dẫn chất lượng và hàng đợi](docs/QUALITY_AND_OFFLINE_JOBS.md).
 
 ## Những điểm kỹ thuật hiện có
 
