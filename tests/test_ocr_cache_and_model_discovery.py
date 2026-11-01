@@ -29,7 +29,7 @@ def test_ocr_cache_reuses_exact_file_and_rescans_change(monkeypatch, tmp_path):
         "rights_confirmed_at": "yes",
         "seo": {"title": "local", "description": "art", "tags": ["blue"]},
     }
-    checks = validate_listing(entry, "redbubble", blocklist=[], cache_dir=tmp_path)
+    validate_listing(entry, "redbubble", blocklist=[], cache_dir=tmp_path)
     assert len(calls) == 1
     assert entry["ocr_cache"]["version"] == 1
     assert entry["ocr_cache"]["sha256"] in json.loads(
