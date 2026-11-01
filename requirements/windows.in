@@ -8,3 +8,5 @@ pyinstaller>=6,<8
 pytest>=8,<10
 ruff>=0.8
 pip-audit>=2.7,<4
+setuptools>=69,<85
+wheel>=0.44,<1
