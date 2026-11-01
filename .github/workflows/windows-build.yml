@@ -19,14 +19,6 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements/windows-py312.lock.txt
-      - name: Resolve Pillow 13 dependency lock for review
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $true
-          python -m pip install "pip-tools>=7,<8"
-          python -m piptools compile --allow-unsafe --generate-hashes --no-emit-index-url --no-emit-trusted-host -o requirements-windows-py312.lock.txt requirements/windows.in
-          python -c "import base64,pathlib; f=pathlib.Path('requirements-windows-py312.lock.txt'); print('PODBOT_LOCK_START'+base64.b64encode(f.read_bytes()).decode()+'PODBOT_LOCK_END')"
       - name: Install Windows hash-locked dependencies
         shell: pwsh
         run: |
