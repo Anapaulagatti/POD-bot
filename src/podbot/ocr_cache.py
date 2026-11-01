@@ -34,10 +34,9 @@ def cached_image_ocr(entry: dict, image: Image.Image, path: Path) -> tuple[OCRRe
             and isinstance(cached.get("available"), bool)
             and isinstance(cached.get("text"), str)
             and isinstance(cached.get("note"), str)
-            and len(cached["text"]) <= MAX_OCR_TEXT):
-        # Failed/unavailable scans must be retried when OCR becomes available.
-        if cached["available"]:
-            return OCRReport(cached["available"], cached["text"], cached["note"]), False
+            and len(cached["text"]) <= MAX_OCR_TEXT
+            and cached["available"]):
+        return OCRReport(cached["available"], cached["text"], cached["note"]), False
     result = scan_ocr(image)
     if result.available:
         entry["ocr_cache"] = {
