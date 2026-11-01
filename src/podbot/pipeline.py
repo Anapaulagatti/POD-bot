@@ -11,6 +11,7 @@ from pathlib import Path
 from PIL import Image
 
 from podbot.audit import audit_image, find_blocked_terms, fingerprint, get_blocklist
+from podbot.flat_background import remove_flat_background
 from podbot.processing import compose_print
 from podbot.prompt_recipe import PromptRecipe, build_prompt, recipe_sha256
 from podbot.prompting import prepare_image_prompt
@@ -74,8 +75,22 @@ def create_draft(
     print_path = folder / "print_5000x5500.png"
     try:
         image.save(source_path, format="PNG")
-        has_alpha = image.convert("RGBA").getchannel("A").getextrema()[0] < 255
-        print_details = compose_print(image, print_path, size=PRINT_SIZE)
+        has_alpha = image.getchannel("A").getextrema()[0] < 255 if "A" in image.getbands() else False
+        printable = image
+        auto_cutout = "not_requested"
+        cutout_warning = ""
+        if recipe is not None and recipe.background != "transparent":
+            if has_alpha:
+                auto_cutout = "already_transparent"
+            else:
+                try:
+                    printable = remove_flat_background(image)
+                    auto_cutout = "success"
+                except ValueError as exc:
+                    # Keep the source and a draft, never silently declare opaque art print-ready.
+                    auto_cutout = "needs_manual_review"
+                    cutout_warning = "Pillow cutout refused this background: " + str(exc)
+        print_details = compose_print(printable, print_path, size=PRINT_SIZE)
         original_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
         record = {
             "id": design_id,
@@ -100,14 +115,23 @@ def create_draft(
             "output_size": list(PRINT_SIZE),
             "source_has_alpha": has_alpha,
             "quality_warning": (
-                "Opaque background detected: manual background removal/inspection required. "
-                "Upscaling does not increase image detail."
-                if not has_alpha else "Inspect edges and resolution before listing."
+                cutout_warning or (
+                    "Auto cutout applied to an opaque original. Inspect edges on dark/light "
+                    "fabric; interpolation cannot restore source detail."
+                    if auto_cutout == "success" else
+                    "Opaque background detected: manual background removal/inspection required. "
+                    "Upscaling does not increase image detail."
+                    if not has_alpha else "Inspect edges and resolution before listing."
+                )
             ),
+            "auto_cutout": auto_cutout,
             "platform_status": {"redbubble": "draft", "teepublic": "draft"},
             "rights_confirmed_at": None,
             "ai_generated": True,
-            "processing": {**print_details, "steps": ["alpha-crop", "safe-margin", "lanczos"]},
+            "processing": {**print_details, "steps": (
+                ["pillow-edge-flood-v1", "alpha-crop", "safe-margin", "lanczos"]
+                if auto_cutout == "success" else ["alpha-crop", "safe-margin", "lanczos"]
+            )},
         }
         with Image.open(print_path) as printed:
             record["quality_checks"] = {
