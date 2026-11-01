@@ -133,13 +133,17 @@ class StudioPages:
             anchor="w", padx=20, pady=(15, 7),
         )
         self.model_dropdown = ctk.CTkOptionMenu(
-            form, values=model_options(), variable=self.model,
+            form, values=["Hãy kiểm tra API key trong Cài đặt"], variable=self.model,
             height=42, corner_radius=10, fg_color=CARD_ALT,
             button_color="#284C64", button_hover_color=BORDER,
             text_color=WHITE, font=self._font(12),
             command=self._model_changed,
         )
         self.model_dropdown.pack(fill="x", padx=20)
+        self._button(
+            form, "Chọn preset thủ công (chưa xác minh quyền)",
+            self.use_manual_model_presets, width=280,
+        ).pack(anchor="e", padx=20, pady=(8, 0))
 
         options = ctk.CTkFrame(form, fg_color="transparent")
         options.pack(fill="x", padx=20, pady=(14, 4))
@@ -360,6 +364,34 @@ class StudioPages:
             card, "Lưu ý: không chia sẻ API key, token hoặc ảnh chụp màn hình chứa thông tin bí mật.",
             11, fg=WARNING, wraplength=730,
         ).pack(anchor="w", padx=20, pady=(14, 20))
+        key_check = self._card(page)
+        key_check.pack(fill="x", padx=8, pady=(0, 14))
+        self._label(
+            key_check, "KIỂM TRA API KEY & DÒ MODEL MỚI", 15, bold=True,
+        ).pack(anchor="w", padx=20, pady=(16, 7))
+        self._label(
+            key_check,
+            "Chỉ đọc danh sách model/định danh tài khoản, không tạo ảnh và không "
+            "cố tính phí. Model được liệt kê chưa chắc có quyền dùng hay hỗ trợ PNG alpha.",
+            11, fg=MUTED, wraplength=720,
+        ).pack(anchor="w", padx=20, pady=(0, 9))
+        check_row = ctk.CTkFrame(key_check, fg_color="transparent")
+        check_row.pack(fill="x", padx=20, pady=(0, 9))
+        ctk.CTkOptionMenu(
+            check_row, values=["openai", "gemini", "replicate", "cloudflare",
+                               "huggingface", "stability", "fal"],
+            variable=self.api_discovery_vendor, width=165, fg_color=CARD_ALT,
+            text_color=WHITE,
+        ).pack(side="left", padx=(0, 9))
+        self._button(
+            check_row, "Kiểm tra key + tải model", self.check_provider_models,
+            width=230, primary=True,
+        ).pack(side="left")
+        self.model_scan_status = self._label(
+            key_check, "Chưa kiểm tra key nào. Không tự dùng model mặc định.",
+            11, fg=WARNING, wraplength=690, justify="left",
+        )
+        self.model_scan_status.pack(anchor="w", padx=20, pady=(2, 17))
         limits = self._card(page)
         limits.pack(fill="x", padx=8, pady=(0, 14))
         self._label(limits, "GIỚI HẠN API VÀ KHO KHÓA WINDOWS", 14, bold=True).pack(
