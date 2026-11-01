@@ -6,6 +6,7 @@ modules. No network calls on the UI thread. Never store API keys or auto-post to
 
 from __future__ import annotations
 
+import hashlib
 import os
 import queue
 import threading
@@ -23,9 +24,10 @@ from podbot.credential_vault import erase_credentials, remember_credentials, res
 from podbot.importer import import_design
 from podbot.job_queue import JobQueue
 from podbot.mockups import create_shirt_mockup
+from podbot.model_discovery import PROVIDER_KEYS, discover_models
 from podbot.offline_tasks import execute_next
 from podbot.pipeline import create_draft
-from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
+from podbot.provider_catalog import LABELS, get_spec, make_provider, set_discovered_models
 from podbot.storage import list_designs
 from podbot.studio_actions import StudioActions
 from podbot.studio_pages import StudioPages, model_options, status_label
@@ -75,7 +77,10 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self.nav_buttons: dict[str, ctk.CTkButton] = {}
         self.pages: dict[str, ctk.CTkScrollableFrame] = {}
 
-        self.model = tk.StringVar(value=CATALOG[0].label)
+        self.model = tk.StringVar(value="Hãy kiểm tra API key trong Cài đặt")
+        self.api_discovery_vendor = tk.StringVar(value="openai")
+        self.verified_provider_keys: dict[str, str] = {}
+        self.manual_models_enabled = False
         self.seo = tk.StringVar(value="SEO offline (miễn phí)")
         self.resolution = tk.StringVar(value="2K")
         self.flat_background_prompt = tk.BooleanVar(value=True)
@@ -393,6 +398,8 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                     continue
                 if kind == "ok":
                     self.message.set("✓  Đã hoàn tất. Dữ liệu được lưu trên máy.")
+                    if isinstance(result, dict) and "_model_discovery" in result:
+                        self._apply_discovery(result)
                     if isinstance(result, dict) and "_job_inspection" in result:
                         messagebox.showinfo("Kiểm tra ảnh + OCR", result["_job_inspection"])
                     self.refresh()
@@ -408,6 +415,78 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             pass
         self.after(120, self._handle_events)
         self._drain_offline_jobs()
+
+    @staticmethod
+    def _credential_fingerprint(provider: str, credentials: dict[str, str]) -> str:
+        key = credentials.get(PROVIDER_KEYS[provider], "").strip()
+        account = credentials.get("CLOUDFLARE_ACCOUNT_ID", "") if provider == "cloudflare" else ""
+        return hashlib.sha256((provider + "\0" + account + "\0" + key).encode()).hexdigest()
+
+    def check_provider_models(self) -> None:
+        if self.busy:
+            return
+        provider = self.api_discovery_vendor.get()
+        credentials = {name: field.get() for name, field in self.keys.items()}
+        if not credentials.get(PROVIDER_KEYS[provider], "").strip():
+            messagebox.showwarning("Thiếu API key", "Nhập key trước khi kiểm tra.")
+            return
+        fingerprint = self._credential_fingerprint(provider, credentials)
+
+        def work():
+            result = discover_models(provider, credentials)
+            return {"_model_discovery": result, "_fingerprint": fingerprint}
+
+        self._run("Đang xác minh key và lấy danh sách model (chỉ đọc)...", work)
+
+    def _apply_discovery(self, payload: dict) -> None:
+        result = payload["_model_discovery"]
+        current = {key: field.get() for key, field in self.keys.items()}
+        if payload["_fingerprint"] != self._credential_fingerprint(result.provider, current):
+            self.model_scan_status.configure(
+                text="API key đã thay đổi trong lúc kiểm tra. Hãy kiểm tra lại.",
+            )
+            return
+        if result.verified:
+            self.verified_provider_keys[result.provider] = payload["_fingerprint"]
+        else:
+            self.verified_provider_keys.pop(result.provider, None)
+        found = set_discovered_models(result.provider, result.models)
+        self.model_scan_status.configure(
+            text=result.message
+            + (f"\nĐã thêm {len(found)} model ảnh tương thích vào danh sách tạo."
+               if found else "\nChưa tìm thấy model ảnh có adapter tương thích.")
+        )
+        values = [
+            label for label in LABELS
+            if LABELS[label].startswith("discovered:") and get_spec(LABELS[label]).vendor
+            in self.verified_provider_keys
+        ]
+        if self.manual_models_enabled:
+            values.extend(model_options())
+        if not values:
+            values = ["Hãy kiểm tra API key trong Cài đặt"]
+        self.model_dropdown.configure(values=values)
+        self.model.set(values[0])
+        self._model_changed(self.model.get())
+        self.message.set("Đã kiểm tra key; chưa phát sinh lượt tạo ảnh tính phí.")
+
+    def use_manual_model_presets(self) -> None:
+        if not messagebox.askyesno(
+            "Bật preset thủ công",
+            "Danh sách preset là cấu hình mẫu, không xác minh quyền truy cập "
+            "hoặc các thông số model mới. Mọi lần tạo ảnh tính phí vẫn cần "
+            "xác nhận. Bạn muốn bật preset thủ công?",
+        ):
+            return
+        self.manual_models_enabled = True
+        choices = [
+            label for label, ident in LABELS.items()
+            if ident.startswith("discovered:") and get_spec(ident).vendor
+            in self.verified_provider_keys
+        ] + model_options()
+        self.model_dropdown.configure(values=choices)
+        self.model.set(choices[0])
+        self._model_changed(self.model.get())
 
     def generate(self) -> None:
         prompt = self.prompt_box.get("1.0", "end").strip()
@@ -426,6 +505,20 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             messagebox.showerror("Model chưa hỗ trợ", "Vui lòng chọn model trong danh sách.")
             return
         spec = get_spec(model_id)
+        if model_id.startswith("discovered:"):
+            current = {name: field.get() for name, field in self.keys.items()}
+            if self.verified_provider_keys.get(spec.vendor) != self._credential_fingerprint(
+                spec.vendor, current
+            ):
+                messagebox.showwarning(
+                    "API key đã đổi", "Hãy xác minh lại key để cập nhật model khả dụng."
+                )
+                return
+        elif not self.manual_models_enabled:
+            messagebox.showwarning(
+                "Model chưa kiểm tra", "Hãy kiểm tra API key hoặc bật preset thủ công."
+            )
+            return
         seo_mode = "gemini" if self.seo.get().startswith("Gemini") else "local"
         if (spec.paid or seo_mode == "gemini") and not messagebox.askyesno(
             "Xác nhận có thể phát sinh phí",
