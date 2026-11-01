@@ -49,7 +49,7 @@ def export_vector(
     design_id: str, tool: Path, *,
     max_colors: int = 6, root: Path | None = None,
 ) -> Path:
-    """Make a review-only SVG from source.png, leaving print PNG and approval untouched.
+    """Trace the approved print cutout, keeping print assets and approval untouched.
 
     VTracer CLI is installed/selected separately by the operator; it is not bundled.
     Tracing is intended for flat graphics and does not establish commercial rights.
@@ -65,19 +65,27 @@ def export_vector(
     record = json.loads(manifest.read_text(encoding="utf-8"))
     if record.get("id") != design_id:
         raise ValueError("Manifest ID mismatch.")
-    source = folder / "source.png"
+    source = Path(record.get("print_file", ""))
+    # Never follow a tampered manifest path outside this design's own folder.
+    if source.suffix.lower() != ".png" or source.resolve().parent != folder.resolve():
+        raise ValueError("Print image must be a PNG inside the selected design folder.")
     if not source.is_file():
-        raise FileNotFoundError("Source image not found; cannot trace a print-preview image.")
+        raise FileNotFoundError("Processed print PNG is missing; export requires a cutout.")
     with tempfile.TemporaryDirectory(prefix="podbot-vector-") as work:
         directory = Path(work)
         input_path = directory / "source.png"
         output_path = directory / "converted.svg"
         with Image.open(source) as image:
-            # A hard limit keeps CPU and memory use modest on older machines.
             if image.width > 20000 or image.height > 20000:
-                raise ValueError("Source image dimensions are unsafe.")
-            original = ImageOps.exif_transpose(image).convert("RGBA")
-            original.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+                raise ValueError("Print image dimensions are unsafe.")
+            # Scale the original PNG before allocating a full-size RGBA buffer.
+            small = ImageOps.contain(image, (1600, 1600), Image.Resampling.LANCZOS)
+            original = small.convert("RGBA")
+            if original.getchannel("A").getextrema()[0] == 255:
+                raise ValueError(
+                    "Print artwork has no transparent cutout. Remove the background "
+                    "and review the PNG before vectorizing."
+                )
             original.save(input_path, "PNG")
         try:
             finished = subprocess.run(
