@@ -17,8 +17,13 @@ def setup_design(tmp_path):
     folder = tmp_path / identifier
     folder.mkdir()
     Image.new("RGBA", (2100, 1800), (50, 75, 120, 255)).save(folder / "source.png")
+    cutout = Image.new("RGBA", (2100, 1800), (0, 0, 0, 0))
+    from PIL import ImageDraw
+    ImageDraw.Draw(cutout).rectangle((300, 250, 1750, 1450), fill=(50, 75, 120, 255))
+    cutout.save(folder / "print.png")
     original = {
         "id": identifier,
+        "print_file": str(folder / "print.png"),
         "platform_status": {"redbubble": "approved", "teepublic": "draft"},
         "approval_evidence": {"redbubble": {"operator": "reviewed"}},
     }
@@ -37,6 +42,7 @@ def test_vectorize_cpu_caps_input_and_does_not_change_manifest(monkeypatch, tmp_
         calls.append((argv, kwargs))
         with Image.open(argv[1]) as source:
             assert max(source.size) == 1600
+            assert source.getpixel((0, 0))[3] == 0
         Path(argv[2]).write_text(SVG, encoding="utf-8")
         return type("Result", (), {"returncode": 0})()
 
@@ -93,3 +99,18 @@ def test_failed_cli_keeps_existing_pod_assets(monkeypatch, tmp_path):
         export_vector(identifier, tool, root=tmp_path)
     assert (folder / "source.png").read_bytes() == source_bytes
     assert json.loads((folder / "manifest.json").read_text()) == original
+
+def test_vector_rejects_opaque_print_and_manifest_path_escape(monkeypatch, tmp_path):
+    identifier, folder, record, tool = setup_design(tmp_path)
+    monkeypatch.setattr(
+        "podbot.vector_export.subprocess.run",
+        lambda *_args, **_kwargs: pytest.fail("must not launch VTracer"),
+    )
+    Image.new("RGB", (100, 100), "white").save(folder / "print.png")
+    with pytest.raises(ValueError, match="transparent cutout"):
+        export_vector(identifier, tool, root=tmp_path)
+    record["print_file"] = str(tmp_path / "outside.png")
+    save_manifest(folder, record)
+    with pytest.raises(ValueError, match="inside"):
+        export_vector(identifier, tool, root=tmp_path)
+
