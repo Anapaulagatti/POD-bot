@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from PIL import Image
 
-from podbot.audit import audit_image
-from podbot.image_review import inspect_halo, scan_ocr
+from podbot.audit import audit_image, get_blocklist
+from podbot.image_review import inspect_halo, review_ocr, scan_ocr
 from podbot.job_queue import JobQueue
 from podbot.processing import ProcessOptions, process_stored_design
 from podbot.storage import list_designs
@@ -33,6 +33,7 @@ def execute_next(queue: JobQueue):
                 checks = audit_image(art, job.payload["platform"])
                 halo = inspect_halo(art)
                 ocr = scan_ocr(art)
+                checks.extend(review_ocr(ocr, get_blocklist(), prompt=entry.get("prompt", "")))
             lines = [f"{x.level.upper()} · {x.name} · {x.message}" for x in checks]
             lines.append(
                 f"Viền sáng: {halo.bright_share:.1%} "
