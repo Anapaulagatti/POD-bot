@@ -28,7 +28,7 @@ from podbot.pipeline import create_draft
 from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
 from podbot.storage import list_designs
 from podbot.studio_actions import StudioActions
-from podbot.studio_pages import StudioPages, model_options as model_options, status_label
+from podbot.studio_pages import StudioPages, model_options, status_label
 from podbot.studio_theme import (
     ACCENT,
     ACCENT_HOVER,
@@ -42,11 +42,13 @@ from podbot.studio_theme import (
     N_FONT,
     PLATFORMS,
     SIDEBAR,
-    STATUSES as STATUSES,
+    STATUSES,
     TEXT,
     WHITE,
 )
 from podbot.trends import read_trends
+
+__all__ = ["PODBotDesktop", "model_options", "status_label", "STATUSES", "TEXT", "MENU", "ACCENT"]
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
