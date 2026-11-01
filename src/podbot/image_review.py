@@ -87,7 +87,7 @@ def review_ocr(
         text[:140] if text else "nothing recognized",
         "OCR is imperfect; inspect all visible text and commercial rights manually.",
     )]
-    if text and re.search(r"\\b(no\\s+(?:text|words|letters|typography|writing))\\b",
+    if text and re.search(r"\b(no\s+(?:text|words|letters|typography|writing))\b",
                           prompt, re.IGNORECASE):
         output.append(Check(
             "ocr_unexpected_text", "warn", text[:140],
@@ -107,7 +107,8 @@ def scan_ocr(
     tool = shutil.which(candidate)
     if tool is None:
         return OCRReport(False, "", "Tesseract OCR is not installed or selected.")
-    rgba = ImageOps.contain(image.convert("RGBA"), (1800, 1800))
+    rgba = image.convert("RGBA")
+    rgba.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
     is_transparent = rgba.getchannel("A").getextrema()[0] < 255
     backgrounds = ((255, 255, 255), (0, 0, 0)) if is_transparent else ((255, 255, 255),)
     lines: list[str] = []
