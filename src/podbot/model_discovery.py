@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-from podbot.free_api_radar import refresh_public_catalog
+from podbot.free_api_radar import refresh_public_catalog, verify_quest_only_key
 
 MAX_DISCOVERY_JSON = 1024 * 1024
 MODEL_ID = re.compile(r"@?[A-Za-z0-9][A-Za-z0-9_./:-]{1,150}\Z")
@@ -171,8 +171,7 @@ def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResu
     elif provider == "pollinations":
         # Pollinations uses an API key, even when the model can spend free
         # Quest credits. A read-only account-key endpoint verifies only the key.
-        _get_json("https://gen.pollinations.ai/account/key",
-                  {"Authorization": f"Bearer {key}"})
+        verify_quest_only_key(key)
         snapshot = refresh_public_catalog()
         models = tuple(
             DiscoveredModel(
