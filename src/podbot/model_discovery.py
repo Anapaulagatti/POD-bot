@@ -60,7 +60,7 @@ def _get_json(url: str, headers: dict[str, str]) -> dict:
     except urllib.error.HTTPError as exc:
         # Never include upstream response bodies or Authorization headers.
         raise RuntimeError(f"Model listing rejected (HTTP {exc.code}).") from None
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError):
         raise RuntimeError("Model listing network request failed.") from None
     if len(raw) > MAX_DISCOVERY_JSON:
         raise RuntimeError("Provider model listing exceeded the response limit.")
@@ -69,7 +69,7 @@ def _get_json(url: str, headers: dict[str, str]) -> dict:
     except (ValueError, UnicodeError):
         raise RuntimeError("Provider returned malformed model JSON.") from None
     if not isinstance(payload, dict):
-        raise RuntimeError("Model response is not an object.")
+        raise TypeError("Model response is not an object.")
     return payload
 
 
@@ -134,7 +134,7 @@ def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResu
             )
             chunk = data.get("models", [])
             if not isinstance(chunk, list):
-                raise RuntimeError("Invalid Gemini model listing.")
+                raise TypeError("Invalid Gemini model listing.")
             items.extend(chunk)
             page_token = data.get("nextPageToken") or ""
             if not page_token or not isinstance(page_token, str) or len(page_token) > 300:
