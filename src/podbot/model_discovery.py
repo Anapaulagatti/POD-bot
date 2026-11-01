@@ -95,10 +95,12 @@ def _clean_models(items: list[dict], vendor: str) -> tuple[DiscoveredModel, ...]
             ) and "generateContent" in item.get("supportedGenerationMethods", [])
         )
         if vendor == "replicate":
-            # The public catalog is not evidence of access or identical prediction schemas.
-            image_candidate = False
+            # Existing official-model adapter supports these exact schemas only.
+            image_candidate = name in {
+                "black-forest-labs/flux-schnell", "black-forest-labs/flux-dev"
+            }
         if vendor == "cloudflare":
-            image_candidate = False
+            image_candidate = name == "@cf/black-forest-labs/flux-1-schnell"
         discovered[name] = DiscoveredModel(
             id=name, name=str(item.get("displayName") or name)[:130],
             compatible=bool(image_candidate),
