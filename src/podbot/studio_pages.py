@@ -425,7 +425,7 @@ class StudioPages:
             ("REPLICATE_API_TOKEN", "Replicate"),
             ("FAL_KEY", "fal.ai"),
             ("STABILITY_API_KEY", "Stability AI"),
-            ("POLLINATIONS_API_KEY", "Pollinations (sk_ cá nhân, giới hạn budget)"),
+            ("POLLINATIONS_API_KEY", "Pollinations THỬ NGHIỆM (sk_ Quest-only, giới hạn budget)"),
         )
         for index, (key, label) in enumerate(names):
             self._label(card, label, 12, bold=True).pack(
@@ -479,12 +479,12 @@ class StudioPages:
             radar,
             "Cloudflare Free: 10.000 Neurons/ngày theo chính sách hiện hành. "
             "Pollinations: danh mục đọc miễn phí, nhưng tạo ảnh có thể trừ "
-            "Quest/Paid Pollen; KHÔNG phải API miễn phí vô hạn. "
-            "Tự cập nhật CHỈ tải metadata công khai, không gửi key và không tạo ảnh.",
+            "Quest Pollen; KHÔNG phải API miễn phí vô hạn. "
+            "Tự cập nhật mặc định TẮT; chỉ tải metadata sau khi bật, không gửi key và không tạo ảnh.",
             11, fg=MUTED, wraplength=720,
         ).pack(anchor="w", padx=20, pady=(0, 8))
         ctk.CTkCheckBox(
-            radar, text="Tự làm mới catalog công khai khi mở Cài đặt (tối đa mỗi 6 giờ)",
+            radar, text="Tùy chọn: tự tải catalog khi mở Cài đặt (mặc định TẮT)",
             variable=self.free_catalog_autoupdate, fg_color=ACCENT,
             text_color=WHITE,
         ).pack(anchor="w", padx=20, pady=(0, 9))
