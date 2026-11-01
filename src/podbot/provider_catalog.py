@@ -82,6 +82,41 @@ CATALOG = (
 )
 MODELS = {item.id: item for item in CATALOG}
 LABELS = {item.label: item.id for item in CATALOG}
+_DISCOVERED: dict[str, ModelSpec] = {}
+
+
+def set_discovered_models(vendor: str, discovered) -> list[ModelSpec]:
+    """Replace only session-local compatible models for one provider; no API calls."""
+    for key, value in list(_DISCOVERED.items()):
+        if value.vendor == vendor:
+            LABELS.pop(value.label, None)
+            _DISCOVERED.pop(key, None)
+    results = []
+    keys = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}
+    if vendor not in keys:
+        return []
+    for item in discovered:
+        if not item.compatible:
+            continue
+        model = item.id
+        if not re.fullmatch(r"[A-Za-z0-9._-]{2,100}", model):
+            continue
+        if vendor == "openai" and not model.startswith("gpt-image-"):
+            continue
+        if vendor == "gemini" and not (
+            "image" in model.casefold() or "banana" in model.casefold()
+        ):
+            continue
+        identifier = f"discovered:{vendor}:{model}"
+        label = f"{vendor.upper()} · {model} (đã liệt kê, chưa test tạo ảnh)"
+        spec = ModelSpec(
+            identifier, label, vendor, model, keys[vendor], True,
+            "Từ API models.list; chỉ xác minh được danh sách, chưa xác nhận tạo ảnh/giá.",
+        )
+        _DISCOVERED[identifier] = spec
+        LABELS[label] = identifier
+        results.append(spec)
+    return results
 
 
 def _check_image(payload: bytes) -> Image.Image:
@@ -169,9 +204,7 @@ class GeminiImage:
     def generate(self, prompt: str) -> Image.Image:
         if not self.key:
             raise ValueError("Gemini API key is required.")
-        allowed = {"gemini-3.1-flash-lite-image", "gemini-3.1-flash-image",
-                   "gemini-3-pro-image", "gemini-nano-banana-2.1"}
-        if self.model not in allowed:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,99}", self.model):
             raise ValueError("Gemini image model is not supported.")
         if self.size not in {"1K", "2K", "4K"}:
             raise ValueError("Invalid Gemini image size.")
@@ -205,7 +238,7 @@ class OpenAIImage:
     def generate(self, prompt: str) -> Image.Image:
         if not self.key:
             raise ValueError("OpenAI API key is required.")
-        if self.model not in {"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}:
+        if not re.fullmatch(r"gpt-image-[A-Za-z0-9._-]{1,90}", self.model):
             raise ValueError("Unsupported OpenAI image model.")
         try:
             result = _call("https://api.openai.com/v1/images/generations", {
@@ -344,9 +377,10 @@ class MeteredImageProvider:
 
 
 def get_spec(selection: str) -> ModelSpec:
-    if selection not in MODELS:
+    spec = MODELS.get(selection) or _DISCOVERED.get(selection)
+    if spec is None:
         raise ValueError("Unknown model identifier; use models list.")
-    return MODELS[selection]
+    return spec
 
 
 def make_provider(
@@ -368,7 +402,7 @@ def make_provider(
             raise ValueError("HF_TOKEN is required.")
         provider = HuggingFaceProvider(token=key)
     elif spec.vendor == "gemini":
-        provider = GeminiImage(spec.model, key, size="1K" if selection == "gemini-flash-lite" else gemini_size)
+        provider = GeminiImage(spec.model, key, size="1K" if spec.model.endswith("flash-lite-image") else gemini_size)
     elif spec.vendor == "openai":
         provider = OpenAIImage(spec.model, key)
     elif spec.vendor == "replicate":
