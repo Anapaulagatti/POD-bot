@@ -469,6 +469,9 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             self._label(self.trend_rows, "Nguồn RSS không có dữ liệu trong đợt tải này.",
                         12, fg=MUTED).pack(anchor="w", padx=10, pady=10)
         for trend in trends:
+            blocked = find_blocked_terms(
+                " ".join((trend.title, *trend.keywords)), get_blocklist()
+            )
             row = ctk.CTkFrame(self.trend_rows, fg_color=CARD_ALT, corner_radius=11)
             row.pack(fill="x", padx=5, pady=5)
             self._label(row, trend.title, 13, bold=True).pack(
@@ -476,6 +479,12 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             )
             self._label(row, f"Lượt quan tâm: {trend.approx_traffic}  ·  {trend.published}",
                         10, fg=MUTED).pack(anchor="w", padx=14, pady=(0, 6))
+            if blocked:
+                self._label(
+                    row, "⚠  Trùng blocklist: " + ", ".join(blocked[:5])
+                    + " · Không tự điền vào thiết kế",
+                    11, fg="#FFB867", wraplength=670,
+                ).pack(anchor="w", padx=14, pady=(0, 5))
             keywords = ", ".join(trend.keywords[:8]) or "Chưa có từ khóa đủ tin cậy"
             self._label(row, f"Gợi ý từ khóa RSS: {keywords}",
                         11, fg=WHITE, wraplength=670, justify="left").pack(
@@ -496,6 +505,8 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                 controls, "Dùng chủ đề + từ khóa",
                 lambda selected=trend: self._use_trend(selected), width=180,
             ).pack(side="left", padx=4)
+            if blocked:
+                controls.winfo_children()[-1].configure(state="disabled")
 
     def _use_trend(self, trend) -> None:
         if not trend.keywords:
