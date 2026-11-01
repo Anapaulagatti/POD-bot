@@ -14,12 +14,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Regenerate reviewed Windows lock including packaging tools
-        shell: pwsh
-        run: |
-          python -m pip install "pip-tools>=7,<8"
-          python -m piptools compile --allow-unsafe --generate-hashes --no-emit-index-url --no-emit-trusted-host requirements/windows.in -o requirements-windows-py312.lock.txt
-          python -c "import base64,pathlib; f=pathlib.Path('requirements-windows-py312.lock.txt'); print('PODBOT_LOCK_START'+base64.b64encode(f.read_bytes()).decode()+'PODBOT_LOCK_END')"
       - name: Install Windows hash-locked dependencies
         shell: pwsh
         run: |
