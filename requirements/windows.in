@@ -7,3 +7,4 @@ huggingface_hub>=0.34,<2
 pyinstaller>=6,<8
 pytest>=8,<10
 ruff>=0.8
+pip-audit>=2.7,<4
