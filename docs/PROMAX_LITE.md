@@ -32,6 +32,14 @@ podbot vectorize --id 0123456789abcdef0123456789abcdef --vtracer "C:\Tools\vtrac
 
 VTracer CLI is MIT licensed, but ensure the **artwork source** is independently licensed. VTracer's separate commercial desktop application and optional generative features may have different terms.
 
+## Chroma: lỗ chữ, hình kín và xử lý thất bại
+
+- Khi công thức chọn `chroma-magenta` hoặc `chroma-green`, ứng dụng xóa **toàn bộ** điểm ảnh gần màu khóa, kể cả phần nền nằm trong chữ O/A/B, vòng tròn và huy hiệu kín. Đây là điểm khác biệt có chủ đích với công cụ tách nền phẳng thông thường, vốn chỉ xóa nền nối với mép để bảo vệ chi tiết trắng.
+- Chỉ áp dụng loại bỏ toàn cục sau khi đã kiểm tra màu khóa ở các góc và các vòng phía trong. Với nền sáng/tối không đồng nhất, ứng dụng giữ nguyên nguồn và trạng thái `draft`, yêu cầu kiểm tra thủ công.
+- Chroma cho phép thiết kế nét mảnh chiếm ít diện tích hơn (miễn còn ít nhất khoảng 0,5% điểm ảnh được nhận diện là nội dung). Những nét quá mảnh vẫn có nguy cơ bị co alpha 1 pixel và cần xem trước phóng to.
+- Chế độ `flat-white` **không** xóa toàn cục: các chi tiết trắng kín có thể là một phần cố ý của thiết kế.
+- Các test dùng hình tổng hợp. Không được coi bộ test này là bằng chứng mọi ảnh AI thực hoặc ảnh JPEG có nền chroma đều in sạch.
+
 ## 4. CPU memory improvements and lettering check
 
 - `fingerprint`, `audit_image`, and `inspect_halo` now scale the source image down **before** converting to RGBA for their 128/512/800-pixel analyses. This avoids allocating another large RGBA analysis buffer for every print preview. Small differences near the hash/alpha threshold are possible; compare old library fingerprints and visually review near-duplicate results after upgrading.
