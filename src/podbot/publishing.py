@@ -11,7 +11,8 @@ from pathlib import Path
 from PIL import Image
 
 from podbot.audit import audit_image, find_blocked_terms, get_blocklist, near_duplicates
-from podbot.image_review import review_ocr, scan_ocr
+from podbot.image_review import review_ocr
+from podbot.ocr_cache import cached_image_ocr
 from podbot.settings import designs_directory
 from podbot.storage import list_designs, save_manifest
 
@@ -43,8 +44,8 @@ def confirm_rights(design_id: str, *, root: Path | None = None) -> dict:
     return entry
 
 
-def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None = None
-                     ) -> list[dict]:
+def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None = None,
+                     cache_dir: Path | None = None) -> list[dict]:
     if platform not in VALID_PLATFORMS:
         raise ValueError("Unknown marketplace.")
     if not entry.get("rights_confirmed_at"):
@@ -61,9 +62,13 @@ def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None 
     source = Path(entry["print_file"])
     if not source.exists():
         raise ValueError("Print image is missing.")
-    with Image.open(source) as file:
-        checks = audit_image(file, platform)
-        checks.extend(review_ocr(scan_ocr(file), terms, prompt=entry.get("prompt", "")))
+    with Image.open(source) as image:
+        checks = audit_image(image, platform)
+        report, changed = cached_image_ocr(entry, image, source)
+        if changed and cache_dir is not None:
+            # Persist a content-hash-bound transcript even when approval subsequently fails.
+            save_manifest(cache_dir, entry)
+        checks.extend(review_ocr(report, terms, prompt=entry.get("prompt", "")))
     failures = [c for c in checks if c.level == "fail"]
     if failures:
         raise ValueError("Print quality fail: " + "; ".join(c.name for c in failures))
@@ -73,7 +78,7 @@ def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None 
 def approve_listing(design_id: str, platform: str, *, root: Path | None = None,
                     blocklist: list[str] | None = None) -> dict:
     file, entry = _load(design_id, root)
-    checks = validate_listing(entry, platform, blocklist=blocklist)
+    checks = validate_listing(entry, platform, blocklist=blocklist, cache_dir=file.parent)
     duplicates = near_duplicates(entry, list_designs(root))
     if duplicates:
         checks.append({
@@ -102,7 +107,7 @@ def mark_uploaded(design_id: str, platform: str, *, confirmed: bool = False,
     if entry.get("platform_status", {}).get(platform) != "approved":
         raise ValueError("Design must be approved before marking uploaded.")
     # Recheck because design or metadata may have changed since approval.
-    validate_listing(entry, platform)
+    validate_listing(entry, platform, cache_dir=file.parent)
     entry["platform_status"][platform] = "uploaded"
     entry.setdefault("upload_confirmed_at", {})[platform] = datetime.now(UTC).isoformat()
     save_manifest(file.parent, entry)
@@ -118,7 +123,12 @@ def export_approved_csv(target: Path, platform: str, *,
         if entry.get("platform_status", {}).get(platform) != "approved":
             continue
         # Fail closed: an invalid approved record must not be exported silently.
-        validate_listing(entry, platform)
+        # The cache is persisted in its existing manifest, not in the export file.
+        record_id = entry.get("id", "")
+        if not re.fullmatch(r"[0-9a-f]{32}", record_id):
+            raise ValueError("Invalid design ID in export.")
+        folder = (root or designs_directory()) / record_id
+        validate_listing(entry, platform, cache_dir=folder)
         seo = entry["seo"]
         records.append({
             "id": entry["id"], "title": seo["title"], "description": seo["description"],
