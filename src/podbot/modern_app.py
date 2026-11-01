@@ -18,23 +18,17 @@ import customtkinter as ctk
 from PIL import Image
 
 from podbot.api_limits import get_daily_limit, set_daily_limit
-from podbot.audit import audit_image, find_blocked_terms, get_blocklist, make_color_preview
+from podbot.audit import find_blocked_terms, get_blocklist, make_color_preview
 from podbot.credential_vault import erase_credentials, remember_credentials, restore_credentials
 from podbot.importer import import_design
 from podbot.job_queue import JobQueue
 from podbot.offline_tasks import execute_next
 from podbot.mockups import create_shirt_mockup
 from podbot.pipeline import create_draft
-from podbot.processing import (
-    ProcessOptions,
-    background_module_available,
-    process_stored_design,
-)
 from podbot.provider_catalog import CATALOG, LABELS, get_spec, make_provider
-from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
-from podbot.settings import data_directory
-from podbot.storage import export_csv, list_designs, update_seo
+from podbot.storage import list_designs
 from podbot.trends import read_trends
+from podbot.studio_actions import StudioActions
 from podbot.studio_theme import (
     BG, SIDEBAR, CARD, CARD_ALT, BORDER, ACCENT, ACCENT_HOVER, ACCENT_TEXT,
     WHITE, MUTED, DANGER, WARNING, N_FONT, PLATFORMS, UPLOADER,
@@ -54,7 +48,7 @@ def status_label(state: str) -> str:
     return STATUSES.get(state, state)
 
 
-class PODBotDesktop(ctk.CTk):
+class PODBotDesktop(StudioActions, ctk.CTk):
     """Single-window, five-page navigation and event-driven background work."""
 
     def __init__(self) -> None:
@@ -964,191 +958,6 @@ class PODBotDesktop(ctk.CTk):
 
         self._run("Đang tạo mô phỏng áo thun...", worker)
 
-    def edit_seo(self) -> None:
-        if not (entry := self._selected()):
-            return
-        popup = ctk.CTkToplevel(self)
-        popup.title("Chỉnh sửa SEO · PODBot")
-        popup.geometry("670x555")
-        popup.configure(fg_color=BG)
-        popup.transient(self)
-        popup.grab_set()
-        seo = entry["seo"]
-        self._label(popup, "Chỉnh sửa nội dung sản phẩm", 21, bold=True).pack(
-            anchor="w", padx=23, pady=(23, 15),
-        )
-        self._label(popup, "Tiêu đề", 12, fg=MUTED).pack(
-            anchor="w", padx=23,
-        )
-        title = ctk.CTkEntry(popup, height=40, fg_color=CARD, border_color=BORDER)
-        title.pack(fill="x", padx=23, pady=(5, 12))
-        title.insert(0, seo["title"])
-        self._label(popup, "Mô tả", 12, fg=MUTED).pack(anchor="w", padx=23)
-        description = ctk.CTkTextbox(popup, height=125, fg_color=CARD,
-                                     border_color=BORDER, border_width=1)
-        description.pack(fill="x", padx=23, pady=(5, 12))
-        description.insert("1.0", seo["description"])
-        self._label(popup, "Thẻ tags (phân tách bằng dấu phẩy)", 12, fg=MUTED).pack(
-            anchor="w", padx=23,
-        )
-        tags = ctk.CTkTextbox(popup, height=70, fg_color=CARD,
-                               border_color=BORDER, border_width=1)
-        tags.pack(fill="x", padx=23, pady=(5, 15))
-        tags.insert("1.0", ", ".join(seo["tags"]))
-
-        def save() -> None:
-            try:
-                update_seo(entry["id"], title.get(),
-                           description.get("1.0", "end").strip(),
-                           tags.get("1.0", "end").split(","))
-            except (OSError, ValueError) as exc:
-                messagebox.showerror("Không lưu được SEO", str(exc), parent=popup)
-                return
-            popup.destroy()
-            self.refresh()
-            self.message.set("Đã lưu SEO. Nếu đã duyệt trước đó, phải duyệt lại.")
-
-        self._button(popup, "Lưu thay đổi", save, primary=True, width=175).pack(
-            anchor="e", padx=23, pady=(0, 20),
-        )
-
-    def process_image(self) -> None:
-        if not (entry := self._selected()):
-            return
-        flat = messagebox.askyesno(
-            "Tách nền phẳng bằng Pillow, có sẵn trong EXE",
-            "Ảnh có nền trắng/màu phẳng gần đồng nhất?\n"
-            "Có = dùng flood-fill từ các mép, không cần API/ML.\n"
-            "Không = chọn rembg (nếu có) hoặc giữ nguyên nền.\n"
-            "Lưu ý: kiểm tra kỹ chữ trắng, nét mảnh và quầng viền sau tách.",
-        )
-        remove, rembg = False, None
-        if not flat:
-            available = background_module_available()
-            remove = messagebox.askyesno(
-                "Tách nền AI rembg tùy chọn",
-                "rembg Python đã cài: " + ("Có" if available else "Chưa") + ".\n"
-                "Có = dùng rembg (có thể tải model lần đầu). "
-                "Không = chỉ chuẩn hóa/căn lề file in.",
-            )
-            if remove and not available:
-                if not messagebox.askyesno(
-                    "Chưa có rembg trong EXE",
-                    "Bạn có rembg.exe cài riêng? Chọn Có để duyệt file. "
-                    "Nếu chạy mã nguồn có thể pip install -e \".[bg]\".",
-                ):
-                    return
-                chosen = filedialog.askopenfilename(title="Chọn rembg.exe đã cài riêng")
-                if not chosen:
-                    return
-                rembg = Path(chosen)
-        upscale = messagebox.askyesno(
-            "Phóng to bằng Real-ESRGAN",
-            "Bạn muốn sử dụng Real-ESRGAN đã cài riêng? "
-            "Chọn Không để dùng Lanczos.",
-        )
-        esrgan = None
-        if upscale:
-            chosen = filedialog.askopenfilename(title="Chọn Real-ESRGAN executable")
-            if not chosen:
-                return
-            esrgan = Path(chosen)
-        if not messagebox.askyesno(
-            "Tạo lại file in",
-            "Sẽ lưu một file mới và hủy phê duyệt đăng bán trước đó. "
-            "Sau khi xử lý, bạn cần kiểm tra file PNG và mockup. Tiếp tục?",
-        ):
-            return
-        options = ProcessOptions(
-            flat_background=flat, remove_background=remove,
-            rembg_binary=rembg, upscale=upscale, esrgan_binary=esrgan,
-        )
-        if not remove and not upscale:
-            self.offline_jobs.enqueue(
-                "reprocess", {"design_id": entry["id"], "flat_background": flat}
-            )
-            self.message.set("Đã thêm tác vụ xử lý ảnh vào hàng đợi an toàn.")
-            self._drain_offline_jobs()
-            return
-        self._run(
-            "Đang cắt nền / tạo lại file in...",
-            process_stored_design, entry["id"], options,
-        )
-
-    def approve(self) -> None:
-        if not (entry := self._selected()):
-            return
-        platform = self.platform.get()
-        if not entry.get("rights_confirmed_at"):
-            if not messagebox.askyesno(
-                "Xác nhận quyền bán thương mại",
-                "Tôi xác nhận có quyền sử dụng thiết kế này để bán, đã rà soát "
-                "nội dung, nhãn hiệu, chính sách nền tảng và file in.",
-            ):
-                return
-            try:
-                confirm_rights(entry["id"])
-            except (OSError, ValueError) as exc:
-                messagebox.showerror("Không xác nhận được", str(exc))
-                return
-        self._run("Đang đánh giá chất lượng và xét duyệt...",
-                  approve_listing, entry["id"], platform)
-
-    def open_store(self) -> None:
-        if not (entry := self._selected()):
-            return
-        platform = self.platform.get()
-        if entry.get("platform_status", {}).get(platform) != "approved":
-            messagebox.showwarning("Chưa được duyệt",
-                                   "Bạn phải phê duyệt thiết kế cho sàn này trước.")
-            return
-        messagebox.showinfo(
-            "Đăng bán thủ công",
-            "Ứng dụng mở trang chính sách và trang bán hàng. "
-            "Bạn cần tự tải PNG lên, kiểm tra vị trí, giá, tags và xác nhận.",
-        )
-        webbrowser.open(POLICY_URLS[platform])
-        webbrowser.open(UPLOADER[platform])
-
-    def mark_uploaded(self) -> None:
-        if not (entry := self._selected()):
-            return
-        platform = self.platform.get()
-        if entry.get("platform_status", {}).get(platform) != "approved":
-            messagebox.showwarning("Chưa duyệt", "Hãy phê duyệt trước khi đánh dấu đã đăng.")
-            return
-        if messagebox.askyesno(
-            "Xác nhận đã đăng",
-            "Bạn đã đăng đúng thiết kế này trên "
-            + PLATFORMS[platform] + " và kiểm tra trong tài khoản người bán?",
-        ):
-            self._run("Đang xác nhận trạng thái đăng bán...",
-                      mark_uploaded, entry["id"], platform, confirmed=True)
-
-    def export(self) -> None:
-        target = filedialog.asksaveasfilename(
-            title="Xuất danh sách đã duyệt",
-            defaultextension=".csv", filetypes=[("CSV", "*.csv")],
-            initialfile=f"podbot-{self.platform.get()}-approved.csv",
-        )
-        if target:
-            try:
-                n = export_csv(Path(target), self.platform.get())
-            except (OSError, ValueError, RuntimeError) as exc:
-                messagebox.showerror("Không xuất được dữ liệu", str(exc))
-                return
-            messagebox.showinfo("Xuất CSV thành công",
-                                f"Đã xuất {n} thiết kế đã duyệt.")
-
-    def edit_blocklist(self) -> None:
-        path = data_directory() / "blocklist.txt"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            path.write_text(
-                "# Mỗi dòng là một từ khóa cần rà soát, không phải dữ liệu nhãn hiệu chính thức.\n",
-                encoding="utf-8",
-            )
-        self._open_file(path)
 
 
 def main() -> None:
