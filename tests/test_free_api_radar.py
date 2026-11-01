@@ -94,10 +94,9 @@ def test_public_catalog_rejects_redirect_or_truncated_body(monkeypatch):
 
 def test_pollinations_key_probe_is_read_only_before_model_selection(monkeypatch):
     calls = []
-    def identity(url, headers):
-        calls.append((url, headers))
-        return {"id": "key-123", "permissions": ["image"]}
-    monkeypatch.setattr(model_discovery, "_get_json", identity)
+    def identity(key):
+        calls.append(key)
+    monkeypatch.setattr(model_discovery, "verify_quest_only_key", identity)
     snapshot = free_api_radar.CatalogSnapshot(
         free_api_radar.parse_image_offers(OFFERS), fetched_at=300.0
     )
@@ -107,8 +106,7 @@ def test_pollinations_key_probe_is_read_only_before_model_selection(monkeypatch)
     )
     assert result.verified
     assert sum(m.compatible for m in result.models) == 1
-    assert calls == [("https://gen.pollinations.ai/account/key",
-                      {"Authorization": "Bearer sk_secret-123"})]
+    assert calls == ["sk_secret-123"]
     assert "secret-123" not in repr(result)
     assert "MAY SPEND Pollen" in result.message
 
@@ -146,6 +144,7 @@ def test_pollinations_image_post_uses_only_one_bounded_api_call(monkeypatch):
     def fake_call(url, body, headers, timeout=180):
         requests.append((url, body, headers, timeout))
         return {"data": [{"b64_json": encoded}]}
+    monkeypatch.setattr(provider_catalog, "verify_quest_only_key", lambda key: None)
     monkeypatch.setattr(provider_catalog, "_call", fake_call)
     monkeypatch.setattr(
         provider_catalog, "refresh_public_catalog",
@@ -171,6 +170,7 @@ def test_pollinations_unknown_image_format_never_retries(monkeypatch):
     def wrong_response(*args, **kwargs):
         calls.append(1)
         return {"data": [{"url": "https://untrusted.test/img.png"}]}
+    monkeypatch.setattr(provider_catalog, "verify_quest_only_key", lambda key: None)
     monkeypatch.setattr(provider_catalog, "_call", wrong_response)
     monkeypatch.setattr(
         provider_catalog, "refresh_public_catalog",
@@ -197,6 +197,7 @@ def test_catalog_turns_paid_only_before_generation_no_api_attempt(monkeypatch):
             free_api_radar.parse_image_offers(changed), 100
         ),
     )
+    monkeypatch.setattr(provider_catalog, "verify_quest_only_key", lambda key: None)
     monkeypatch.setattr(provider_catalog, "_call",
                         lambda *args, **kwargs: requests.append(1))
     wrapped = provider_catalog.MeteredImageProvider(
@@ -206,3 +207,81 @@ def test_catalog_turns_paid_only_before_generation_no_api_attempt(monkeypatch):
     with pytest.raises(PermissionError, match="no longer Quest-eligible"):
         wrapped.generate("badger illustration")
     assert not requests
+
+
+
+@pytest.mark.parametrize("key_info,expected", [
+    ({"valid": True, "type": "secret", "questPollenOnly": True}, None),
+    ({"valid": True, "type": "secret", "questPollenOnly": False}, "Quest-Pollen-only"),
+    ({"valid": True, "type": "secret"}, "Quest-Pollen-only"),
+    ({"valid": True, "type": "publishable", "questPollenOnly": True}, "sk_ secret"),
+    ({"valid": False, "type": "secret", "questPollenOnly": True}, "validity"),
+])
+def test_readonly_key_preflight_requires_quest_only(monkeypatch, key_info, expected):
+    seen = []
+
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self, size):
+            return json.dumps(key_info).encode()
+
+    def fake_open(request, *, timeout):
+        seen.append(request)
+        assert timeout == 12
+        return Response()
+
+    monkeypatch.setattr(free_api_radar, "open_authenticated", fake_open)
+    if expected:
+        with pytest.raises(PermissionError, match=expected):
+            free_api_radar.verify_quest_only_key("sk_unit-test-only")
+    else:
+        free_api_radar.verify_quest_only_key("sk_unit-test-only")
+    assert len(seen) == 1
+    request = seen[0]
+    assert request.get_method() == "GET"
+    assert request.full_url == "https://gen.pollinations.ai/account/key"
+    assert request.get_header("Authorization") == "Bearer sk_unit-test-only"
+    assert "sk_unit-test-only" not in request.full_url
+
+
+def test_catalog_requires_exact_image_endpoint_and_image_modality():
+    data = [
+        {"id": "a/image-only", "paid_only": False,
+         "output_modalities": ["image"]},
+        {"id": "a/fake-image-route", "paid_only": False,
+         "output_modalities": ["image"],
+         "supported_endpoints": ["/some/other/images/generations"]},
+        {"id": "a/compatible", "paid_only": False,
+         "output_modalities": ["image"],
+         "supported_endpoints": ["/v1/images/generations"]},
+    ]
+    selected = free_api_radar.parse_image_offers(data)
+    assert [o.model_id for o in selected if o.image_adapter] == ["a/compatible"]
+
+
+def test_default_auto_catalog_refresh_is_off():
+    from pathlib import Path
+    import podbot.modern_app as modern_app
+
+    source = Path(modern_app.__file__).read_text(encoding="utf-8")
+    assert "self.free_catalog_autoupdate = tk.BooleanVar(value=False)" in source
+
+
+def test_preflight_blocks_paid_wallet_access_before_reserving(monkeypatch):
+    seen = []
+    def reject(key):
+        seen.append(key)
+        raise PermissionError("Pollinations key is NOT Quest-Pollen-only.")
+    monkeypatch.setattr(provider_catalog, "verify_quest_only_key", reject)
+    monkeypatch.setattr(provider_catalog, "_call",
+                        lambda *args, **kwargs: pytest.fail("must not make POST"))
+    wrapped = provider_catalog.MeteredImageProvider(
+        provider_catalog.PollinationsImage("tongyi-mai/z-image-turbo", "sk_test"),
+        "pollinations", "pollinations:model",
+    )
+    with pytest.raises(PermissionError, match="Quest-Pollen-only"):
+        wrapped.generate("astronaut cat")
+    assert seen == ["sk_test"]
