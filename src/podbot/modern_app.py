@@ -9,8 +9,8 @@ from __future__ import annotations
 import hashlib
 import os
 import queue
-import time
 import threading
+import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
