@@ -16,8 +16,8 @@ from podbot.processing import ProcessOptions, background_module_available, proce
 from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark_uploaded
 from podbot.settings import data_directory
 from podbot.storage import export_csv, update_seo
-from podbot.vector_export import export_vector
 from podbot.studio_theme import BG, BORDER, CARD, MUTED, PLATFORMS, UPLOADER
+from podbot.vector_export import export_vector
 
 
 class StudioActions:
