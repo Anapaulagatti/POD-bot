@@ -44,8 +44,8 @@ jobs:
       - name: Check native Windows onedir execution and GUI startup
         shell: pwsh
         run: |
-          & ".\\dist\\PODBot\\PODBot.exe" --smoke-test
-          if ($LASTEXITCODE -ne 0) { throw "PODBot onedir self-test failed: $LASTEXITCODE" }
+          $probe = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot\\PODBot.exe") -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($probe.ExitCode -ne 0) { throw "PODBot onedir self-test failed: $($probe.ExitCode)" }
           $process = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot\\PODBot.exe") -PassThru
           Start-Sleep -Seconds 4
           $process.Refresh()
@@ -58,8 +58,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
-          & ".\\dist\\PODBot.exe" --smoke-test
-          if ($LASTEXITCODE -ne 0) { throw "Onefile self-test failed: $LASTEXITCODE" }
+          $probe = Start-Process -FilePath (Resolve-Path ".\\dist\\PODBot.exe") -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($probe.ExitCode -ne 0) { throw "Onefile self-test failed: $($probe.ExitCode)" }
       - name: Smoke-check Windows EXE output
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
