@@ -35,7 +35,7 @@ def chroma_design(color=(255, 0, 255)):
     ("chroma-green", (0, 255, 0)),
 ])
 def test_chroma_prompt_and_pillow_auto_cutout(background, color, tmp_path, monkeypatch):
-    import podbot.pipeline as pipeline
+    from podbot import pipeline
     monkeypatch.setattr(pipeline, "PRINT_SIZE", (440, 480))
     recipe = PromptRecipe(subject="Original navy mountain badge", background=background)
     provider = Stub(chroma_design(color))
@@ -71,7 +71,7 @@ def test_chroma_key_cannot_overlap_art_palette(palette, background):
 
 
 def test_chroma_failure_stays_draft_and_keeps_source(tmp_path, monkeypatch):
-    import podbot.pipeline as pipeline
+    from podbot import pipeline
     monkeypatch.setattr(pipeline, "PRINT_SIZE", (440, 480))
     recipe = PromptRecipe(subject="Original detailed mountain design")
     image = Image.new("RGB", (160, 180))
