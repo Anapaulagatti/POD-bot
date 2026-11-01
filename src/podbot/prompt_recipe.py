@@ -22,6 +22,14 @@ LAYOUTS = {
 BACKGROUNDS = {
     "transparent": "isolated artwork on a genuinely transparent alpha background",
     "flat-white": "isolated artwork on a uniformly flat pure white background, easy to remove",
+    "chroma-magenta": (
+        "solid uniform chroma-key background #FF00FF, pure vivid magenta, "
+        "with no checkerboard, no transparency pattern and no variations"
+    ),
+    "chroma-green": (
+        "solid uniform chroma-key background #00FF00, pure bright green, "
+        "with no checkerboard, no transparency pattern and no variations"
+    ),
 }
 HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}\Z")
 
@@ -38,7 +46,7 @@ class PromptRecipe:
     style: str = "minimal-vector"
     layout: str = "centered"
     colors: tuple[str, ...] = ("#123047", "#F4AC45", "#F5F0DE")
-    background: str = "transparent"
+    background: str = "chroma-magenta"
     text_rule: str = "none"
     original_text: str = ""
     version: int = RECIPE_VERSION
@@ -82,6 +90,18 @@ class PromptRecipe:
             raise ValueError("Palette accepts only #RRGGBB colors.")
         if len(set(colors)) != len(colors):
             raise ValueError("Duplicate HEX colors in palette.")
+        chroma = {"chroma-magenta": (255, 0, 255), "chroma-green": (0, 255, 0)}
+        if self.background in chroma:
+            key = chroma[self.background]
+            if any(
+                max(abs(int(color[i:i + 2], 16) - key[index])
+                    for index, i in enumerate((1, 3, 5))) < 70
+                for color in colors
+            ):
+                raise ValueError(
+                    "Chroma background is too similar to the design palette. "
+                    "Choose the other chroma color to avoid losing artwork."
+                )
         if any(ord(char) < 32 for char in subject + original_text):
             raise ValueError("Prompt contains control characters.")
         return PromptRecipe(
