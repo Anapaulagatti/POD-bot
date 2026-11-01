@@ -8,8 +8,8 @@ from PIL import Image
 
 from podbot.audit import audit_image, get_blocklist
 from podbot.image_review import inspect_halo, review_ocr
-from podbot.ocr_cache import cached_image_ocr
 from podbot.job_queue import JobQueue
+from podbot.ocr_cache import cached_image_ocr
 from podbot.processing import ProcessOptions, process_stored_design
 from podbot.storage import list_designs, save_manifest
 
