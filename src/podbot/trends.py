@@ -16,6 +16,8 @@ COMMON_WORDS = {
     "news", "breaking", "latest", "about", "with", "this", "that", "what", "when",
     "from", "have", "will", "are", "was", "the", "for", "and", "now", "how",
     "why", "who", "more", "your", "its", "into", "after", "before", "says",
+    "a", "an", "to", "of", "in", "on", "at", "by", "as", "or", "is", "be", "and",
+    "up", "out", "off", "than", "over", "under", "via", "per", "not", "new",
 }
 
 
@@ -46,6 +48,11 @@ def keyword_suggestions(topic: str, headlines: tuple[str, ...] = ()) -> tuple[st
     def add(phrase: str) -> None:
         value = " ".join(phrase.split()).strip(" -.,:;!?")
         key = value.casefold()
+        words = re.findall(r"[\w]+(?:[-'][\w]+)*", value, re.UNICODE)
+        if not words:
+            return
+        if words[0].casefold() in COMMON_WORDS or words[-1].casefold() in COMMON_WORDS:
+            return
         if 3 <= len(value) <= 90 and key not in seen:
             seen.add(key)
             candidates.append(value)
