@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,7 +39,7 @@ def inspect_halo(image: Image.Image, *, threshold: float = 0.35) -> HaloReport:
     """Measure pale, partially transparent fringe as a review hint, not a verdict."""
     if not 0 <= threshold <= 1:
         raise ValueError("Invalid halo threshold.")
-    sample = ImageOps.contain(image.convert("RGBA"), (800, 800))
+    sample = ImageOps.contain(image, (800, 800), Image.Resampling.LANCZOS).convert("RGBA")
     rgba = sample.tobytes()
     partial = bright = 0
     for i in range(0, len(rgba), 4):
@@ -67,7 +68,8 @@ def create_fabric_preview(image: Image.Image, destination: Path) -> Path:
 
 
 def review_ocr(
-    report: OCRReport, blocked_terms: list[str], *, prompt: str = ""
+    report: OCRReport, blocked_terms: list[str], *,
+    prompt: str = "", expected_text: str = ""
 ) -> list[Check]:
     """Advisory OCR + hard block only for recognized exact blocklist phrases."""
     if not report.available:
@@ -93,6 +95,17 @@ def review_ocr(
             "ocr_unexpected_text", "warn", text[:140],
             "Words detected even though the prompt requested no text.",
         ))
+    if expected_text:
+        def normalize(value: str) -> str:
+            return " ".join(
+                unicodedata.normalize("NFKC", value).casefold().split()
+            )
+        if normalize(expected_text) not in normalize(text):
+            output.append(Check(
+                "ocr_expected_text", "warn", text[:140] or "nothing recognized",
+                "Detected text does not match the requested original lettering. "
+                "Proofread the artwork manually before approval.",
+            ))
     return output
 
 
