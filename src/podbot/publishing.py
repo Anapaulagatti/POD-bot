@@ -11,6 +11,7 @@ from pathlib import Path
 from PIL import Image
 
 from podbot.audit import audit_image, find_blocked_terms, get_blocklist, near_duplicates
+from podbot.image_review import review_ocr, scan_ocr
 from podbot.settings import designs_directory
 from podbot.storage import list_designs, save_manifest
 
@@ -53,7 +54,8 @@ def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None 
         entry.get("prompt", ""), listing.get("title", ""),
         listing.get("description", ""), *listing.get("tags", []),
     ])
-    blocked = find_blocked_terms(combined, get_blocklist() if blocklist is None else blocklist)
+    terms = get_blocklist() if blocklist is None else blocklist
+    blocked = find_blocked_terms(combined, terms)
     if blocked:
         raise ValueError(f"blocklist requires review: {', '.join(blocked[:5])}")
     source = Path(entry["print_file"])
@@ -61,6 +63,7 @@ def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None 
         raise ValueError("Print image is missing.")
     with Image.open(source) as file:
         checks = audit_image(file, platform)
+        checks.extend(review_ocr(scan_ocr(file), terms, prompt=entry.get("prompt", "")))
     failures = [c for c in checks if c.level == "fail"]
     if failures:
         raise ValueError("Print quality fail: " + "; ".join(c.name for c in failures))
