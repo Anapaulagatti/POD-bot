@@ -14,6 +14,7 @@ APPROVED_API_HOSTS = frozenset({
     "fal.run",
     "api.stability.ai",
     "api.cloudflare.com",
+    "gen.pollinations.ai",
 })
 
 
