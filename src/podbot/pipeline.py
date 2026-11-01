@@ -84,7 +84,11 @@ def create_draft(
                 auto_cutout = "already_transparent"
             else:
                 try:
-                    printable = remove_flat_background(image)
+                    key = {
+                        "chroma-magenta": (255, 0, 255),
+                        "chroma-green": (0, 255, 0),
+                    }.get(recipe.background)
+                    printable = remove_flat_background(image, chroma_key=key)
                     auto_cutout = "success"
                 except ValueError as exc:
                     # Keep the source and a draft, never silently declare opaque art print-ready.
