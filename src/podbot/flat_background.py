@@ -81,18 +81,28 @@ def remove_flat_background(
     r, g, b = difference.split()
     maximum = ImageChops.lighter(ImageChops.lighter(r, g), b)
     candidates = maximum.point(lambda value: 255 if value <= tolerance else 0)
-    # Flood all four borders, including multiple edge-connected components.
-    # Bound component count to prevent pathological patterns from taking too long.
-    regions = 0
-    for point in edge_points:
-        if candidates.getpixel(point) == 255:
-            regions += 1
-            if regions > 32:
-                raise ValueError("Too many separate edge areas for safe flat cutout.")
-            ImageDraw.floodfill(candidates, point, 128, thresh=0)
-    matte = candidates.point(lambda value: 255 if value == 128 else 0)
+    if chroma_key is not None:
+        # The key is selected outside the artwork palette. Closed counters in
+        # letters (O/A/B) and enclosed badge holes must also be transparent.
+        # Edge-connected flood fill would preserve those islands as solid chroma.
+        matte = candidates
+    else:
+        # Generic white/flat removal cannot assume enclosed matching colors are
+        # background: a white interior is often legitimate artwork.
+        # Bound edge-connected component count to avoid pathological patterns.
+        regions = 0
+        for point in edge_points:
+            if candidates.getpixel(point) == 255:
+                regions += 1
+                if regions > 32:
+                    raise ValueError("Too many separate edge areas for safe flat cutout.")
+                ImageDraw.floodfill(candidates, point, 128, thresh=0)
+        matte = candidates.point(lambda value: 255 if value == 128 else 0)
     removed_fraction = matte.histogram()[255] / (w * h)
-    if not 0.08 <= removed_fraction <= 0.92:
+    # Chroma has a verified key, so sparse crosses or thin text are legitimate.
+    # Still refuse blank or nearly blank frames instead of manufacturing art.
+    max_background = 0.995 if chroma_key is not None else 0.92
+    if not 0.08 <= removed_fraction <= max_background:
         raise ValueError("Detected background covers an unsafe area; no changes applied.")
     hard_foreground = ImageOps.invert(matte)
     soft_foreground = hard_foreground
