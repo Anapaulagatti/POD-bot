@@ -65,11 +65,14 @@ def local_seo(niche: str, keywords: str, prompt: str) -> SEOMetadata:
     return normalize_metadata(title, description, derived)
 
 
-def gemini_seo(niche: str, keywords: str, prompt: str, api_key: str = "") -> SEOMetadata:
+def gemini_seo(
+    niche: str, keywords: str, prompt: str, api_key: str = "",
+    *, model: str | None = None,
+) -> SEOMetadata:
     key = api_key or os.environ.get("GEMINI_API_KEY", "")
     if not key:
         raise ValueError("GEMINI_API_KEY is required for AI SEO.")
-    model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    model = model or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
     if not re.fullmatch(r"[\w.\-]+", model):
         raise ValueError("Invalid Gemini model identifier.")
     instructions = (
