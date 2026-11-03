@@ -14,6 +14,11 @@ import urllib.request
 from dataclasses import dataclass
 
 MAX_DISCOVERY_JSON = 1024 * 1024
+# Free-tier candidates based on Google pricing, not per-project entitlement.
+GEMINI_FREE_TEXT_CANDIDATES = frozenset({
+    "gemini-3.5-flash-lite", "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite", "gemini-3.5-flash",
+})
 MODEL_ID = re.compile(r"@?[A-Za-z0-9][A-Za-z0-9_./:-]{1,150}\Z")
 PROVIDER_KEYS = {
     "openai": "OPENAI_API_KEY",
@@ -40,6 +45,7 @@ class DiscoveryResult:
     verified: bool
     models: tuple[DiscoveredModel, ...]
     message: str
+    seo_models: tuple[DiscoveredModel, ...] = ()
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -110,6 +116,36 @@ def _clean_models(items: list[dict], vendor: str) -> tuple[DiscoveredModel, ...]
     return tuple(sorted(discovered.values(), key=lambda m: (not m.compatible, m.id))[:120])
 
 
+def _gemini_text_models(items: list[dict]) -> tuple[DiscoveredModel, ...]:
+    """Separate text generation from image models; no inference or billing claims."""
+    out: dict[str, DiscoveredModel] = {}
+    for item in items[:300]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        methods = item.get("supportedGenerationMethods", [])
+        if not isinstance(name, str) or not isinstance(methods, list):
+            continue
+        name = name.removeprefix("models/")
+        if (not re.fullmatch(r"gemini-[a-zA-Z0-9._-]{3,100}", name)
+                or "generateContent" not in methods
+                or any(token in name.casefold() for token in (
+                    "image", "banana", "embedding", "tts", "audio",
+                    "live", "robotics", "computer", "video",
+                ))):
+            continue
+        is_free_candidate = name in GEMINI_FREE_TEXT_CANDIDATES
+        out[name] = DiscoveredModel(
+            name, str(item.get("displayName") or name)[:130], True,
+            ("Free Tier listed in Google pricing; project quota/access not verified"
+             if is_free_candidate else
+             "Text model listed; free-tier pricing not verified, may be paid"),
+        )
+    return tuple(sorted(out.values(), key=lambda m: (
+        m.id not in GEMINI_FREE_TEXT_CANDIDATES, m.id
+    ))[:100])
+
+
 def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResult:
     """Verify selected key through list/identity, then show listed models, never infer."""
     if provider not in PROVIDER_KEYS:
@@ -123,6 +159,7 @@ def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResu
             "fal: No verified free credential-specific model-list endpoint configured. "
             "Key and entitlement not yet verified; choose a documented preset manually.",
         )
+    seo_models: tuple[DiscoveredModel, ...] = ()
     if provider == "gemini":
         headers = {"x-goog-api-key": key}
         items = []
@@ -142,6 +179,7 @@ def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResu
             if not page_token or not isinstance(page_token, str) or len(page_token) > 300:
                 break
         models = _clean_models(items, provider)
+        seo_models = _gemini_text_models(items)
     elif provider == "openai":
         data = _get_json("https://api.openai.com/v1/models",
                          {"Authorization": f"Bearer {key}"})
@@ -183,4 +221,10 @@ def discover_models(provider: str, credentials: dict[str, str]) -> DiscoveryResu
         f"{compatible} image-model candidates supported by current adapter. "
         "A successful listing does NOT confirm credits, image generation, or transparency."
     )
-    return DiscoveryResult(provider, True, models, message)
+    if provider == "gemini":
+        message += (
+            f" {len(seo_models)} Gemini text models available for SEO/prompt "
+            "editing (separate from image generation). "
+            "Google models.list alone does NOT guarantee free-tier project access."
+        )
+    return DiscoveryResult(provider, True, models, message, seo_models)

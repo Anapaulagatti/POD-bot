@@ -29,6 +29,7 @@ from podbot.offline_tasks import execute_next
 from podbot.pipeline import create_draft
 from podbot.prompt_recipe import PromptRecipe, build_prompt
 from podbot.provider_catalog import LABELS, get_spec, make_provider, set_discovered_models
+from podbot.seo import gemini_refine_prompt
 from podbot.storage import list_designs
 from podbot.studio_actions import StudioActions
 from podbot.studio_pages import StudioPages, model_options, status_label
@@ -82,6 +83,9 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self.api_discovery_vendor = tk.StringVar(value="openai")
         self.verified_provider_keys: dict[str, str] = {}
         self.verified_model_choices: dict[str, set[str]] = {}
+        self.verified_gemini_text_models: set[str] = set()
+        self.gemini_text_model_labels: dict[str, str] = {}
+        self.gemini_seo_model = tk.StringVar(value="Kiểm tra key Gemini để tải model")
         self.manual_models_enabled = False
         self.seo = tk.StringVar(value="SEO offline (miễn phí)")
         self.resolution = tk.StringVar(value="2K")
@@ -412,6 +416,16 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                     self.message.set("✓  Đã hoàn tất. Dữ liệu được lưu trên máy.")
                     if isinstance(result, dict) and "_model_discovery" in result:
                         self._apply_discovery(result)
+                    if isinstance(result, dict) and "_gemini_refined_prompt" in result:
+                        self.prompt_box.delete("1.0", "end")
+                        self.prompt_box.insert("1.0", result["_gemini_refined_prompt"])
+                        self._built_recipe = None
+                        self._built_prompt = ""
+                        self.flat_background_prompt.set(False)
+                        self.message.set(
+                            "Gemini đã viết lại prompt. Hãy duyệt nội dung, "
+                            "nền và quyền thương mại trước khi tạo ảnh."
+                        )
                     if isinstance(result, dict) and "_job_inspection" in result:
                         messagebox.showinfo("Kiểm tra ảnh + OCR", result["_job_inspection"])
                     self.refresh()
@@ -477,6 +491,22 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             self.verified_provider_keys[result.provider] = payload["_fingerprint"]
         else:
             self.verified_provider_keys.pop(result.provider, None)
+        if result.provider == "gemini":
+            self.verified_gemini_text_models = (
+                {entry.id for entry in result.seo_models} if result.verified else set()
+            )
+            self.gemini_text_model_labels = {
+                (
+                    f"{entry.id} · Free Tier ứng viên"
+                    if "Free Tier listed" in entry.note else
+                    f"{entry.id} · chưa xác minh miễn phí"
+                ): entry.id for entry in result.seo_models
+            } if result.verified else {}
+            candidates = list(self.gemini_text_model_labels)
+            if not candidates:
+                candidates = ["Không tìm thấy Gemini model văn bản"]
+            self.gemini_seo_dropdown.configure(values=candidates)
+            self.gemini_seo_model.set(candidates[0])
         found = set_discovered_models(result.provider, result.models)
         self.verified_model_choices[result.provider] = (
             {spec.id for spec in found} if result.verified else set()
@@ -501,6 +531,45 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self.model.set(values[0])
         self._model_changed(self.model.get())
         self.message.set("Đã kiểm tra key; chưa phát sinh lượt tạo ảnh tính phí.")
+
+    def _selected_gemini_text_model(self) -> str | None:
+        model = self.gemini_text_model_labels.get(self.gemini_seo_model.get())
+        if not model or model not in self.verified_gemini_text_models:
+            return None
+        current = {name: field.get() for name, field in self.keys.items()}
+        if (self.verified_provider_keys.get("gemini")
+                != self._credential_fingerprint("gemini", current)):
+            return None
+        return model
+
+    def refine_prompt_with_gemini(self) -> None:
+        """Text-only, one-request action; does not generate an image."""
+        model = self._selected_gemini_text_model()
+        if model is None:
+            messagebox.showwarning(
+                "Chưa xác minh Gemini",
+                "Vào Cài đặt, chọn Gemini và bấm Kiểm tra key + tải model. "
+                "Lưu ý: models.list không bảo đảm project có quyền Free Tier.",
+            )
+            return
+        prompt = self.prompt_box.get("1.0", "end").strip()
+        if not 8 <= len(prompt) <= 3500:
+            messagebox.showwarning("Prompt", "Nhập 8–3500 ký tự trước khi viết lại.")
+            return
+        if not messagebox.askyesno(
+            "Gemini văn bản: xác nhận gọi API",
+            f"Model: {model}\n\n"
+            "Chỉ viết lại PROMPT, không tạo PNG. Google có thể tính phí nếu "
+            "project thuộc Paid Tier; dùng Free Tier không được bảo đảm. "
+            "Yêu cầu vẫn được tính vào giới hạn API nội bộ. "
+            "Bạn có đồng ý gửi đúng một yêu cầu?",
+        ):
+            return
+        key = self.keys["GEMINI_API_KEY"].get().strip()
+        def work():
+            revised = gemini_refine_prompt(prompt, key, model=model)
+            return {"_gemini_refined_prompt": revised}
+        self._run("Gemini đang viết lại prompt văn bản (không tạo ảnh)...", work)
 
     def use_manual_model_presets(self) -> None:
         if not messagebox.askyesno(
@@ -598,6 +667,17 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
             )
             return
         seo_mode = "gemini" if self.seo.get().startswith("Gemini") else "local"
+        selected_seo_model = None
+        if seo_mode == "gemini":
+            selected_seo_model = self._selected_gemini_text_model()
+            if selected_seo_model is None:
+                messagebox.showwarning(
+                    "Gemini SEO chưa kiểm tra",
+                    "Vào Cài đặt → Gemini → Kiểm tra key + tải model, "
+                    "sau đó chọn model văn bản trong Studio. "
+                    "Free Tier theo bảng giá không bảo đảm project được cấp quyền.",
+                )
+                return
         if (spec.paid or seo_mode == "gemini") and not messagebox.askyesno(
             "Xác nhận có thể phát sinh phí",
             f"Model: {spec.label}\nSEO Gemini: {'Bật' if seo_mode == 'gemini' else 'Tắt'}\n\n"
@@ -619,7 +699,8 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self._run("Đang tạo hình ảnh và dữ liệu SEO...", create_draft,
                   prompt, niche, keywords, provider, seo_mode, key,
                   flat_background_prompt=self.flat_background_prompt.get(),
-                  prompt_recipe=recipe_data)
+                  prompt_recipe=recipe_data,
+                  gemini_seo_model=selected_seo_model)
 
     def import_file(self) -> None:
         path = filedialog.askopenfilename(

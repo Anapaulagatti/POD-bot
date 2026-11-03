@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from PIL import Image
@@ -12,12 +13,14 @@ from podbot.api_limits import get_daily_limit, set_daily_limit
 from podbot.audit import audit_image, make_color_preview
 from podbot.importer import import_design
 from podbot.mockups import create_shirt_mockup
+from podbot.model_discovery import GEMINI_FREE_TEXT_CANDIDATES
 from podbot.pipeline import create_draft
 from podbot.processing import ProcessOptions, process_stored_design
 from podbot.provider_catalog import CATALOG, MODELS, get_spec, make_provider
 from podbot.publishing import approve_listing, confirm_rights, mark_uploaded
 from podbot.quality import assess_design
 from podbot.rehash import rehash_designs
+from podbot.seo import gemini_refine_prompt
 from podbot.storage import export_csv, list_designs, update_state
 from podbot.trends import read_trends
 from podbot.vector_export import export_vector
@@ -36,6 +39,18 @@ def main() -> None:
     create.add_argument("--gemini-size", choices=["1K", "2K", "4K"], default="2K")
     create.add_argument("--flat-prompt", action="store_true", help="Append flat white background guidance")
     create.add_argument("--seo", choices=["local", "gemini"], default="local")
+    create.add_argument(
+        "--gemini-seo-model", default=None,
+        help="Text-only Gemini SEO model ID (may incur charges; do not use image models)",
+    )
+    text_cmd = commands.add_parser(
+        "gemini-text", help="Rewrite one POD prompt using Gemini text only (no image)"
+    )
+    text_cmd.add_argument("--prompt", required=True)
+    text_cmd.add_argument("--model", choices=sorted(GEMINI_FREE_TEXT_CANDIDATES),
+                          default="gemini-3.5-flash-lite")
+    text_cmd.add_argument("--paid-ok", action="store_true",
+                          help="Confirm potentially billed Gemini text API call")
     import_cmd = commands.add_parser("import", help="Import a local design without image API")
     import_cmd.add_argument("--file", type=Path, required=True)
     import_cmd.add_argument("--niche", required=True)
@@ -98,8 +113,15 @@ def main() -> None:
         record = create_draft(
             args.prompt, args.niche, args.keywords, provider, seo_mode=args.seo,
             flat_background_prompt=args.flat_prompt,
+            gemini_seo_model=args.gemini_seo_model,
         )
         print(json.dumps(record, indent=2, ensure_ascii=False))
+    elif args.command == "gemini-text":
+        if not args.paid_ok:
+            parser.error("Gemini may bill a paid-tier project; pass --paid-ok if confirmed.")
+        print(gemini_refine_prompt(
+            args.prompt, os.environ.get("GEMINI_API_KEY", ""), model=args.model
+        ))
     elif args.command == "import":
         result = import_design(args.file, args.niche, args.keywords)
         print(json.dumps({"id": result["id"], "path": result["print_file"]}))

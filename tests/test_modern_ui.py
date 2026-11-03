@@ -1,6 +1,9 @@
 """Headless GUI contract tests: no window or network is created."""
 
+import sys
 from pathlib import Path
+
+import pytest
 
 from podbot.modern_app import (
     ACCENT,
@@ -62,3 +65,40 @@ def test_entrypoint_launches_vietnamese_studio():
 
     assert PODBotApp is PODBotDesktop
     assert main.__module__ == "podbot.modern_app"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native Tk UI requires Windows")
+def test_real_gemini_text_model_dropdown_separate_from_image(monkeypatch):
+    from podbot import modern_app
+    from podbot.model_discovery import DiscoveredModel, DiscoveryResult
+
+    class NoDiskJobs:
+        def recover(self):
+            return None
+
+    monkeypatch.setattr(modern_app, "JobQueue", NoDiskJobs)
+    monkeypatch.setattr(modern_app, "list_designs", list)
+    monkeypatch.setattr(modern_app, "get_daily_limit", lambda: 0)
+    app = modern_app.PODBotDesktop()
+    try:
+        app.withdraw()
+        assert app.gemini_seo_model.get() == "Kiểm tra key Gemini để tải model"
+        app.keys["GEMINI_API_KEY"].set("test-only-no-network")
+        credentials = {name: var.get() for name, var in app.keys.items()}
+        result = DiscoveryResult(
+            "gemini", True, (),
+            "Read-only model inventory; no inference verified",
+            (DiscoveredModel(
+                "gemini-3.5-flash-lite", "Flash Lite", True,
+                "Free Tier listed in Google pricing; project quota/access not verified",
+            ),),
+        )
+        app._apply_discovery({
+            "_model_discovery": result,
+            "_fingerprint": app._credential_fingerprint("gemini", credentials),
+        })
+        assert app._selected_gemini_text_model() == "gemini-3.5-flash-lite"
+        app.keys["GEMINI_API_KEY"].set("changed")
+        assert app._selected_gemini_text_model() is None
+    finally:
+        app.destroy()

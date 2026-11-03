@@ -212,6 +212,22 @@ class StudioPages:
             variable=self.seo, height=40, corner_radius=10, fg_color=CARD_ALT,
             button_color="#284C64", text_color=WHITE,
         ).pack(fill="x")
+        self._label(
+            seo_group, "MODEL GEMINI VĂN BẢN (KHÔNG TẠO ẢNH)", 10,
+            fg=MUTED, bold=True,
+        ).pack(anchor="w", pady=(12, 5))
+        self.gemini_seo_dropdown = ctk.CTkOptionMenu(
+            seo_group, values=["Kiểm tra key Gemini để tải model"],
+            variable=self.gemini_seo_model, height=35, corner_radius=10,
+            fg_color=CARD_ALT, button_color="#284C64", text_color=WHITE,
+        )
+        self.gemini_seo_dropdown.pack(fill="x")
+        self._label(
+            seo_group,
+            "Flash-Lite có Free Tier theo bảng giá, nhưng quyền sử dụng và phí "
+            "phụ thuộc project Google. Tạo PNG bằng Gemini Image là luồng khác.",
+            10, fg=WARNING, wraplength=360, justify="left",
+        ).pack(anchor="w", pady=(6, 0))
         size_group = ctk.CTkFrame(options, fg_color="transparent")
         size_group.grid(row=0, column=1, sticky="ew", padx=(9, 0))
         self._label(size_group, "ĐỘ PHÂN GIẢI GEMINI", 10, fg=MUTED, bold=True).pack(
@@ -234,6 +250,10 @@ class StudioPages:
         self.model_explanation.pack(anchor="w", padx=20, pady=(12, 11))
         buttons = ctk.CTkFrame(form, fg_color="transparent")
         buttons.pack(fill="x", padx=20, pady=(0, 20))
+        self._button(
+            buttons, "Gemini viết lại prompt (chỉ văn bản)",
+            self.refine_prompt_with_gemini, width=266,
+        ).pack(side="left", padx=(0, 10))
         self.create_button = self._button(
             buttons, "✦  Tạo bằng AI", self.generate, primary=True, width=165,
         )

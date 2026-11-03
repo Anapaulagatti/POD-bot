@@ -43,6 +43,7 @@ def create_draft(
     root: Path | None = None,
     *, flat_background_prompt: bool = False,
     prompt_recipe: dict | None = None,
+    gemini_seo_model: str | None = None,
 ) -> dict:
     prompt = prompt.strip()
     if len(prompt) < 5:
@@ -61,7 +62,11 @@ def create_draft(
         raise ValueError("blocklist requires review: " + ", ".join(blocked[:5]))
     # Validate metadata and tokens before any costly image request.
     if seo_mode == "gemini":
-        metadata = gemini_seo(niche, keywords, prompt, gemini_key)
+        metadata = (
+            gemini_seo(niche, keywords, prompt, gemini_key, model=gemini_seo_model)
+            if gemini_seo_model else
+            gemini_seo(niche, keywords, prompt, gemini_key)
+        )
     else:
         metadata = local_seo(niche, keywords, prompt)
     image_prompt = prepare_image_prompt(prompt, flat_background=flat_background_prompt)
@@ -109,6 +114,7 @@ def create_draft(
             "keywords": keywords.strip(),
             "provider": provider.name,
             "seo_mode": seo_mode,
+            "gemini_seo_model": gemini_seo_model if seo_mode == "gemini" else None,
             "seo": metadata.to_dict() if isinstance(metadata, SEOMetadata) else metadata,
             "source_file": str(source_path.resolve()),
             "print_file": str(print_path.resolve()),
