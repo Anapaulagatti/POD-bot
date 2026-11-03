@@ -77,7 +77,7 @@ def test_real_windows_ui_starts_with_free_catalog_auto_refresh_disabled(monkeypa
             return None
 
     monkeypatch.setattr(modern_app, "JobQueue", NoDiskQueue)
-    monkeypatch.setattr(modern_app, "list_designs", lambda: [])
+    monkeypatch.setattr(modern_app, "list_designs", list)
     monkeypatch.setattr(modern_app, "get_daily_limit", lambda: 0)
     monkeypatch.setattr(
         modern_app, "refresh_public_catalog",
