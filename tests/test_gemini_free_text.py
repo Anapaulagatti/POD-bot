@@ -11,7 +11,6 @@ from podbot import model_discovery, pipeline, seo
 from podbot.model_discovery import GEMINI_FREE_TEXT_CANDIDATES, _gemini_text_models
 from podbot.seo import SEOMetadata
 
-
 MODELS = [
     {"name": "models/gemini-3.5-flash-lite", "displayName": "Gemini 3.5 Lite",
      "supportedGenerationMethods": ["generateContent"]},
