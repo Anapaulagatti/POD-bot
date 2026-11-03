@@ -4,6 +4,15 @@
 
 Phiên bản kỹ thuật `1.0.0rc3` (1.0 Preview 3). Đây là bản thử nghiệm, không phải bản sản xuất đã ký mã. Các bản 4.x trước đây chỉ mang ý nghĩa tên bản thử nghiệm và được giữ trong CHANGELOG để tra cứu.
 
+## ProMax Lite: nâng cấp cho máy cấu hình yếu
+
+- **Prompt có cấu trúc, 0 phí dựng prompt:** Trang **Sáng tạo AI → Bộ dựng prompt có cấu trúc**. Chọn chủ thể, phong cách, bố cục, 1–6 màu HEX, nền chroma xanh/hồng, trắng phẳng hoặc trong suốt (nếu model hỗ trợ) và quy tắc chữ. Bấm **Dựng prompt** để tự soạn lời nhắc trên máy, không có request API. Chỉ khi bạn bấm **Tạo bằng AI** và xác nhận phí thì mới gửi đi.
+- **Truy vết prompt:** Manifest lưu phiên bản bộ dựng, công thức và SHA256 của lời nhắc thực gửi; nếu chỉnh prompt thủ công, ứng dụng không giả vờ giữ nguồn gốc bộ dựng.
+- **Chroma key + cắt nền tự động:** Mặc định với model chưa xác minh alpha là nền hồng sen phẳng; ảnh gốc được giữ nguyên, Pillow thử tách nền và cảnh báo nếu không an toàn. Không cần GPU.\n- **QC tiết kiệm RAM:** Thu nhỏ trước khi đổi sang RGBA ở các phép thống kê; chưa cam kết mức RAM đỉnh cụ thể trên máy thật.\n- **Vector hóa VTracer tùy chọn:** Thư viện → **Xuất SVG (VTracer)**, tự chọn `vtracer.exe` đã cài từ nguồn tin cậy. Dùng PNG in đã tách nền, chạy CPU, giới hạn đầu vào 1600 px, tối đa 6 màu, 180 giây, kiểm tra SVG đầu ra. **Không tự thay đổi file PNG, duyệt bán hoặc tự cài thêm model.**
+- **EXE chuẩn gọn nhẹ:** Không tích hợp CUDA, PyTorch, BiRefNet, LayerDiffuse, ComfyUI, Spandrel, CLIP hay model 7B. Tách nền Pillow và xem trước trên màu áo vẫn có sẵn; rembg là tùy chọn riêng.
+
+Xem [hướng dẫn ProMax Lite](docs/PROMAX_LITE.md) và [skill CPU-first](.claude/skills/promax-cpu-lite/SKILL.md) để biết chính xác các giới hạn và cách dùng.
+
 ## Bắt đầu trong Windows
 
 1. Trên [GitHub Actions](https://github.com/Anapaulagatti/POD-bot/actions), chọn workflow thành công của nhánh `main`; tải `PODBot-windows-onedir`, giải nén và chạy `PODBot/PODBot.exe`. Bản một-file được tạo khi chạy workflow thủ công hoặc phát hành bằng tag.

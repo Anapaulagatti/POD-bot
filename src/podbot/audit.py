@@ -67,7 +67,10 @@ def fingerprint(image: Image.Image) -> str:
     White motifs cannot disappear into a white-only background. The alpha signature
     is also effective for transparent lettering and different outline shapes.
     """
-    rgba = image.convert("RGBA")
+    # Resize in the source mode before allocating RGBA buffers. Fingerprints
+    # compare silhouettes, not native-resolution print pixels.
+    sample = ImageOps.contain(image, (128, 128), Image.Resampling.LANCZOS)
+    rgba = sample.convert("RGBA")
     preview = Image.new("RGBA", rgba.size, (127, 127, 127, 255))
     preview.alpha_composite(rgba)
     return "v2:" + _dhash(preview.convert("RGB")) + _dhash(rgba.getchannel("A"))
@@ -92,8 +95,7 @@ def audit_image(image: Image.Image, platform: str, *,
     if image.width <= 0 or image.height <= 0:
         raise ValueError("Empty image.")
     # Downsample for statistical scans; check real full-size dimensions separately.
-    rgba = image.convert("RGBA")
-    small = ImageOps.contain(rgba, (512, 512), Image.Resampling.LANCZOS)
+    small = ImageOps.contain(image, (512, 512), Image.Resampling.LANCZOS).convert("RGBA")
     alpha = small.getchannel("A")
     box = alpha.getbbox()
     output: list[Check] = []

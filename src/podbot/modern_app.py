@@ -27,6 +27,7 @@ from podbot.mockups import create_shirt_mockup
 from podbot.model_discovery import PROVIDER_KEYS, discover_models
 from podbot.offline_tasks import execute_next
 from podbot.pipeline import create_draft
+from podbot.prompt_recipe import PromptRecipe, build_prompt
 from podbot.provider_catalog import LABELS, get_spec, make_provider, set_discovered_models
 from podbot.storage import list_designs
 from podbot.studio_actions import StudioActions
@@ -85,6 +86,16 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self.seo = tk.StringVar(value="SEO offline (miễn phí)")
         self.resolution = tk.StringVar(value="2K")
         self.flat_background_prompt = tk.BooleanVar(value=True)
+        self.recipe_subject = tk.StringVar(value="minimalist mountain sunrise")
+        self.recipe_style = tk.StringVar(value="minimal-vector")
+        self.recipe_layout = tk.StringVar(value="centered")
+        self.recipe_palette = tk.StringVar(value="#123047, #F4AC45, #F5F0DE")
+        self.recipe_background = tk.StringVar(value="chroma-magenta")
+        self.recipe_background_auto = True
+        self.recipe_lettering = tk.StringVar(value="none")
+        self.recipe_text = tk.StringVar(value="")
+        self._built_recipe: dict | None = None
+        self._built_prompt: str = ""
         self.niche = tk.StringVar(value="minh họa thiên nhiên")
         self.keywords = tk.StringVar(value="mountain, nature, hiking")
         self.platform = tk.StringVar(value="redbubble")
@@ -407,6 +418,13 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
                     if isinstance(result, dict) and "id" in result:
                         self.selected_id = result["id"]
                         self.refresh()
+                    if isinstance(result, Path) and result.suffix == ".svg":
+                        self.message.set("Đã xuất SVG để kiểm tra: " + str(result))
+                        messagebox.showinfo(
+                            "SVG đã tạo (cần duyệt)",
+                            f"File: {result}\nHãy xem lại đường nét, chữ và giấy phép "
+                            "trước khi sử dụng. PNG đã duyệt bán không thay đổi.",
+                        )
                     if isinstance(result, list):
                         self._show_trends(result)
                 else:
@@ -498,10 +516,58 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         self.model.set(choices[0])
         self._model_changed(self.model.get())
 
+    def build_structured_prompt(self) -> None:
+        """Build locally; never call a provider or consume an API attempt."""
+        try:
+            recipe = PromptRecipe(
+                subject=self.recipe_subject.get(),
+                style=self.recipe_style.get(),
+                layout=self.recipe_layout.get(),
+                colors=tuple(item.strip() for item in self.recipe_palette.get().split(",")),
+                background=self.recipe_background.get(),
+                text_rule=self.recipe_lettering.get(),
+                original_text=self.recipe_text.get(),
+            ).validated()
+            spec_id = LABELS.get(self.model.get())
+            if recipe.background == "transparent":
+                capability = get_spec(spec_id).alpha_capability if spec_id else "unknown"
+                detail = (
+                    "Adapter sẽ yêu cầu PNG alpha, nhưng chưa xác minh bằng API thật."
+                    if capability == "requested-unverified" else
+                    "Model này chưa được xác minh có thể xuất kênh alpha thật. "
+                    "Nền caro hoặc nền đặc sẽ không được tự động chuyển thành trong suốt."
+                )
+                if not messagebox.askyesno(
+                    "Nền trong suốt chưa xác minh",
+                    detail + "\n\nNên dùng chroma-magenta hoặc chroma-green cho "
+                    "máy yếu. Bạn vẫn muốn dựng prompt với nền trong suốt?",
+                ):
+                    return
+            assembled = build_prompt(recipe)
+        except ValueError as exc:
+            messagebox.showwarning("Cấu hình prompt chưa hợp lệ", str(exc))
+            return
+        self.prompt_box.delete("1.0", "end")
+        self.prompt_box.insert("1.0", assembled)
+        self._built_recipe = recipe.to_manifest()
+        self._built_prompt = assembled
+        # Background requirement is already part of the structured prompt.
+        self.flat_background_prompt.set(False)
+        self.message.set("Đã dựng prompt trên máy, 0 phí API. Hãy rà soát trước khi tạo ảnh.")
+
     def generate(self) -> None:
         prompt = self.prompt_box.get("1.0", "end").strip()
         niche = self.niche.get().strip()
         keywords = self.keywords.get().strip()
+        recipe_data = self._built_recipe if prompt == self._built_prompt else None
+        if (recipe_data and recipe_data["background"] == "transparent"
+                and self.flat_background_prompt.get()):
+            messagebox.showwarning(
+                "Quy tắc nền mâu thuẫn",
+                "Prompt yêu cầu alpha trong suốt nhưng hậu tố nền trắng phẳng đang bật. "
+                "Hãy bỏ chọn hậu tố nền trắng trước khi gọi API.",
+            )
+            return
         if len(prompt) < 5 or not niche:
             messagebox.showwarning("Thiếu thông tin", "Hãy nhập prompt và chủ đề thiết kế.")
             return
@@ -552,7 +618,8 @@ class PODBotDesktop(StudioPages, StudioActions, ctk.CTk):
         key = self.keys["GEMINI_API_KEY"].get()
         self._run("Đang tạo hình ảnh và dữ liệu SEO...", create_draft,
                   prompt, niche, keywords, provider, seo_mode, key,
-                  flat_background_prompt=self.flat_background_prompt.get())
+                  flat_background_prompt=self.flat_background_prompt.get(),
+                  prompt_recipe=recipe_data)
 
     def import_file(self) -> None:
         path = filedialog.askopenfilename(

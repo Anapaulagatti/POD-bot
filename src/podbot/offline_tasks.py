@@ -38,7 +38,15 @@ def execute_next(queue: JobQueue):
                 ocr, changed = cached_image_ocr(entry, art, Path(entry["print_file"]))
                 if changed:
                     save_manifest(Path(entry["print_file"]).parent, entry)
-                checks.extend(review_ocr(ocr, get_blocklist(), prompt=entry.get("prompt", "")))
+                recipe = entry.get("prompt_recipe") or {}
+                expected = (
+                    recipe.get("original_text", "")
+                    if recipe.get("text_rule") == "original" else ""
+                )
+                checks.extend(review_ocr(
+                    ocr, get_blocklist(), prompt=entry.get("prompt", ""),
+                    expected_text=expected,
+                ))
             lines = [f"{x.level.upper()} · {x.name} · {x.message}" for x in checks]
             lines.append(
                 f"Viền sáng: {halo.bright_share:.1%} "

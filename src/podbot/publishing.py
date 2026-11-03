@@ -68,7 +68,11 @@ def validate_listing(entry: dict, platform: str, *, blocklist: list[str] | None 
         if changed and cache_dir is not None:
             # Persist a content-hash-bound transcript even when approval subsequently fails.
             save_manifest(cache_dir, entry)
-        checks.extend(review_ocr(report, terms, prompt=entry.get("prompt", "")))
+        recipe = entry.get("prompt_recipe") or {}
+        expected = recipe.get("original_text", "") if recipe.get("text_rule") == "original" else ""
+        checks.extend(review_ocr(
+            report, terms, prompt=entry.get("prompt", ""), expected_text=expected,
+        ))
     failures = [c for c in checks if c.level == "fail"]
     if failures:
         raise ValueError("Print quality fail: " + "; ".join(c.name for c in failures))

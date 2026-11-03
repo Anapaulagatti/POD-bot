@@ -20,6 +20,7 @@ from podbot.quality import assess_design
 from podbot.rehash import rehash_designs
 from podbot.storage import export_csv, list_designs, update_state
 from podbot.trends import read_trends
+from podbot.vector_export import export_vector
 
 
 def main() -> None:
@@ -74,6 +75,10 @@ def main() -> None:
     process.add_argument("--bg", action="store_true", help="Use rembg Python optional extra")
     process.add_argument("--flat-bg", action="store_true", help="Remove a flat background with Pillow")
     process.add_argument("--esrgan", type=Path)
+    vector = commands.add_parser("vectorize", help="Review-only SVG with selected VTracer CLI (CPU)")
+    vector.add_argument("--id", required=True)
+    vector.add_argument("--vtracer", type=Path, required=True)
+    vector.add_argument("--max-colors", type=int, default=6)
     rehash = commands.add_parser("rehash", help="Migrate legacy fingerprints from source.png")
     rehash.add_argument("--dry-run", action="store_true")
     check = commands.add_parser("audit", help="Run detailed local QC checks")
@@ -102,6 +107,8 @@ def main() -> None:
         if args.set is not None:
             set_daily_limit(args.set)
         print(f"Daily potential-billing calls per provider: {get_daily_limit()}")
+    elif args.command == "vectorize":
+        print(export_vector(args.id, args.vtracer, max_colors=args.max_colors))
     elif args.command == "rehash":
         print(json.dumps(rehash_designs(dry_run=args.dry_run), indent=2))
     elif args.command == "models":

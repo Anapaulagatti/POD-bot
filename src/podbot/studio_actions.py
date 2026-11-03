@@ -17,6 +17,7 @@ from podbot.publishing import POLICY_URLS, approve_listing, confirm_rights, mark
 from podbot.settings import data_directory
 from podbot.storage import export_csv, update_seo
 from podbot.studio_theme import BG, BORDER, CARD, MUTED, PLATFORMS, UPLOADER
+from podbot.vector_export import export_vector
 
 
 class StudioActions:
@@ -138,6 +139,25 @@ class StudioActions:
             "Đang cắt nền / tạo lại file in...",
             process_stored_design, entry["id"], options,
         )
+
+    def export_svg(self) -> None:
+        if not (entry := self._selected()):
+            return
+        if not messagebox.askyesno(
+            "Xuất SVG tùy chọn (CPU)",
+            "Chỉ dành cho thiết kế ít màu. Bạn cần tự cài và chọn VTracer CLI "
+            "từ nguồn tin cậy. SVG phải được xem lại và không thay đổi trạng thái "
+            "duyệt PNG. Có thể mất thời gian trên máy yếu. Tiếp tục?",
+        ):
+            return
+        executable = filedialog.askopenfilename(
+            title="Chọn VTracer CLI đã cài riêng",
+            filetypes=[("Windows executable", "*.exe"), ("Tất cả file", "*.*")],
+        )
+        if not executable:
+            return
+        self._run("Đang dựng SVG bằng VTracer CPU...", export_vector,
+                  entry["id"], Path(executable))
 
     def approve(self) -> None:
         if not (entry := self._selected()):

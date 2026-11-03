@@ -37,6 +37,9 @@ class ModelSpec:
     env_key: str
     paid: bool
     hint: str
+    # "requested-unverified": API adapter requests alpha; live result not yet confirmed.
+    # "unknown": no verified native transparency contract.
+    alpha_capability: str = "unknown"
 
 
 CATALOG = (
@@ -60,10 +63,12 @@ CATALOG = (
               "High-quality 1K/2K/4K generation, token billed."),
     ModelSpec("openai-flare", "OpenAI · GPT Image 2.5 Flare (paid)", "openai",
               "gpt-image-2.5-flare", "OPENAI_API_KEY", True,
-              "Transparent PNG generation; OpenAI image API billing."),
+              "Transparent PNG is requested; actual alpha remains unverified." ,
+              "requested-unverified"),
     ModelSpec("openai-sunburst", "OpenAI · GPT Image 2.5 Sunburst (paid)", "openai",
               "gpt-image-2.5-sunburst", "OPENAI_API_KEY", True,
-              "High fidelity transparent PNG; OpenAI image API billing."),
+              "Transparent PNG is requested; actual alpha remains unverified.",
+              "requested-unverified"),
     ModelSpec("replicate-schnell", "Replicate · FLUX.1 Schnell (paid)", "replicate",
               "black-forest-labs/flux-schnell", "REPLICATE_API_TOKEN", True,
               "Image billed per successful output."),
