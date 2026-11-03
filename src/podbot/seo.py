@@ -65,6 +65,19 @@ def local_seo(niche: str, keywords: str, prompt: str) -> SEOMetadata:
     return normalize_metadata(title, description, derived)
 
 
+def _validate_gemini_text_model(model: str) -> str:
+    if not isinstance(model, str) or not re.fullmatch(
+        r"gemini-[a-zA-Z0-9._-]{3,100}", model
+    ):
+        raise ValueError("Invalid Gemini text model identifier.")
+    if any(part in model.casefold() for part in (
+        "image", "banana", "tts", "audio", "live",
+        "embedding", "video", "robotics", "computer",
+    )):
+        raise ValueError("Use a Gemini text model, not an image/audio model.")
+    return model
+
+
 def gemini_seo(
     niche: str, keywords: str, prompt: str, api_key: str = "",
     *, model: str | None = None,
@@ -73,8 +86,7 @@ def gemini_seo(
     if not key:
         raise ValueError("GEMINI_API_KEY is required for AI SEO.")
     model = model or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
-    if not re.fullmatch(r"[\w.\-]+", model):
-        raise ValueError("Invalid Gemini model identifier.")
+    model = _validate_gemini_text_model(model)
     instructions = (
         "You create accurate English product listing drafts for ORIGINAL print-on-demand art. "
         "Return ONLY a JSON object with string title, string description, and list of 10-15 "
@@ -96,6 +108,16 @@ def gemini_seo(
         with open_authenticated(request, timeout=90) as response:
             result = read_limited_json(response)
     except urllib.error.HTTPError as exc:
+        if exc.code == 403:
+            raise RuntimeError(
+                "Gemini SEO HTTP 403: project restricted or Free Tier unavailable. "
+                "Check AI Studio project; models.list success does not grant inference."
+            ) from None
+        if exc.code == 429:
+            raise RuntimeError(
+                "Gemini SEO HTTP 429: quota or rate limit reached for this model. "
+                "Check AI Studio Rate Limits; no automatic retry."
+            ) from None
         raise RuntimeError(f"Gemini SEO API returned HTTP {exc.code}.") from None
     try:
         content = result["candidates"][0]["content"]["parts"][0]["text"]
@@ -109,8 +131,7 @@ def gemini_refine_prompt(prompt: str, api_key: str, *, model: str) -> str:
     """Explicit, potentially billable text-only prompt rewrite. No retries or images."""
     if not api_key.strip():
         raise ValueError("GEMINI_API_KEY is required for Gemini prompt editing.")
-    if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]{3,100}", model):
-        raise ValueError("Invalid Gemini text model ID.")
+    model = _validate_gemini_text_model(model)
     if not 8 <= len(prompt.strip()) <= 3500:
         raise ValueError("Prompt must be between 8 and 3500 characters.")
     instructions = (
