@@ -1,7 +1,7 @@
 """Headless GUI contract tests: no window or network is created."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
