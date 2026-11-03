@@ -4,6 +4,13 @@
 
 Phiên bản kỹ thuật `1.0.0rc3` (1.0 Preview 3). Đây là bản thử nghiệm, không phải bản sản xuất đã ký mã. Các bản 4.x trước đây chỉ mang ý nghĩa tên bản thử nghiệm và được giữ trong CHANGELOG để tra cứu.
 
+## Gemini Free Tier: dùng model văn bản đúng chức năng
+
+- Cài đặt → Gemini → **Kiểm tra key + tải model**: tách danh sách model tạo **ảnh** và model tạo **văn bản**. Flash-Lite text model không còn bị coi là không dùng được chỉ vì không xuất PNG.
+- Studio có ô **MODEL GEMINI VĂN BẢN**, nút **Gemini viết lại prompt (chỉ văn bản)**, và tùy chọn chọn model riêng cho SEO Gemini. Không tự động gọi API; mỗi lượt yêu cầu xác nhận và nằm trong hạn mức nội bộ.
+- **Lưu ý:** Free Tier theo bảng giá Google không bảo đảm project của bạn được cấp quota; model tạo ảnh Gemini có mức giá riêng. Lỗi 403/429 sẽ hướng dẫn kiểm tra project và quota thay vì âm thầm gọi lại.
+- Hướng dẫn: [Gemini Free Tier trong PODBot](docs/GEMINI_FREE_TIER.md).
+
 ## ProMax Lite: nâng cấp cho máy cấu hình yếu
 
 - **Prompt có cấu trúc, 0 phí dựng prompt:** Trang **Sáng tạo AI → Bộ dựng prompt có cấu trúc**. Chọn chủ thể, phong cách, bố cục, 1–6 màu HEX, nền chroma xanh/hồng, trắng phẳng hoặc trong suốt (nếu model hỗ trợ) và quy tắc chữ. Bấm **Dựng prompt** để tự soạn lời nhắc trên máy, không có request API. Chỉ khi bạn bấm **Tạo bằng AI** và xác nhận phí thì mới gửi đi.
