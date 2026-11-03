@@ -172,3 +172,28 @@ def test_gemini_text_seo_model_is_recorded_in_manifest(monkeypatch, tmp_path):
     assert json.loads((tmp_path / entry["id"] / "manifest.json").read_text())[
         "gemini_seo_model"
     ] == "gemini-3.1-flash-lite"
+
+
+@pytest.mark.parametrize("model", [
+    "gemini-3.1-flash-image", "gemini-nano-banana-2.1",
+    "gemini-2.5-flash-tts", "../traversal",
+])
+def test_image_and_audio_models_are_rejected_before_text_api_or_reservation(
+    monkeypatch, model,
+):
+    monkeypatch.setattr(
+        seo, "open_authenticated",
+        lambda *args, **kwargs: pytest.fail("no Gemini image/text network"),
+    )
+    monkeypatch.setattr(
+        seo, "reserve_paid_request",
+        lambda *args, **kwargs: pytest.fail("no metering on invalid model"),
+    )
+    with pytest.raises(ValueError):
+        seo.gemini_refine_prompt(
+            "Original clean mountain illustration", "not-real", model=model
+        )
+    with pytest.raises(ValueError):
+        seo.gemini_seo(
+            "mountain", "outdoors", "original mountain", "not-real", model=model,
+        )
