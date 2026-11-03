@@ -1,6 +1,9 @@
 """Headless GUI contract tests: no window or network is created."""
 
 from pathlib import Path
+import sys
+
+import pytest
 
 from podbot.modern_app import (
     ACCENT,
@@ -62,3 +65,29 @@ def test_entrypoint_launches_vietnamese_studio():
 
     assert PODBotApp is PODBotDesktop
     assert main.__module__ == "podbot.modern_app"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Requires native Windows Tk GUI")
+def test_real_windows_ui_starts_with_free_catalog_auto_refresh_disabled(monkeypatch):
+    """An actual Tk variable, not a source-text pattern, guards network privacy."""
+    from podbot import modern_app
+
+    class NoDiskQueue:
+        def recover(self):
+            return None
+
+    monkeypatch.setattr(modern_app, "JobQueue", NoDiskQueue)
+    monkeypatch.setattr(modern_app, "list_designs", lambda: [])
+    monkeypatch.setattr(modern_app, "get_daily_limit", lambda: 0)
+    monkeypatch.setattr(
+        modern_app, "refresh_public_catalog",
+        lambda **_kwargs: pytest.fail("Catalog network must be opt-in"),
+    )
+    app = modern_app.PODBotDesktop()
+    try:
+        app.withdraw()
+        assert app.free_catalog_autoupdate.get() is False
+        app.show_page("settings")
+        assert app.free_catalog_autoupdate.get() is False
+    finally:
+        app.destroy()
