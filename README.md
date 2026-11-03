@@ -4,6 +4,13 @@
 
 Phiên bản kỹ thuật `1.0.0rc3` (1.0 Preview 3). Đây là bản thử nghiệm, không phải bản sản xuất đã ký mã. Các bản 4.x trước đây chỉ mang ý nghĩa tên bản thử nghiệm và được giữ trong CHANGELOG để tra cứu.
 
+## Free API Radar: tìm model thử trước khi mua
+
+- **Cloudflare Workers AI Free** là lựa chọn đầu tiên vì có hạn mức miễn phí được nhà cung cấp công bố. Adapter Cloudflare đã có sẵn.
+- **Pollinations**: API catalog public tự làm mới **chỉ sau khi người dùng bật tùy chọn (mặc định TẮT)**, khi mở **Cài đặt** (cache 6 giờ); không gửi key, không tạo ảnh. Nếu muốn thử, dùng **POLLINATIONS_API_KEY** riêng (`sk_`), chọn Pollinations → Kiểm tra key + tải model, chỉ model hỗ trợ Quest Pollen và endpoint ảnh tương thích mới được đưa vào danh sách.
+- **Lưu ý quan trọng:** Quest Pollen là credit có thể bị trừ, không phải giá $0. Mỗi lần thử đều cần xác nhận và bị giới hạn số request/ngày; key phải có hạn mức ngân sách trên dashboard nhà cung cấp. Không tự cài plugin, không tự chạy model mới, không dùng key chia sẻ.
+- [Xem bảng repo uy tín, điều kiện miễn phí và hướng dẫn test](docs/FREE_API_RADAR.md).
+
 ## ProMax Lite: nâng cấp cho máy cấu hình yếu
 
 - **Prompt có cấu trúc, 0 phí dựng prompt:** Trang **Sáng tạo AI → Bộ dựng prompt có cấu trúc**. Chọn chủ thể, phong cách, bố cục, 1–6 màu HEX, nền chroma xanh/hồng, trắng phẳng hoặc trong suốt (nếu model hỗ trợ) và quy tắc chữ. Bấm **Dựng prompt** để tự soạn lời nhắc trên máy, không có request API. Chỉ khi bạn bấm **Tạo bằng AI** và xác nhận phí thì mới gửi đi.

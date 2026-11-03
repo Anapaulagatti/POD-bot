@@ -425,6 +425,7 @@ class StudioPages:
             ("REPLICATE_API_TOKEN", "Replicate"),
             ("FAL_KEY", "fal.ai"),
             ("STABILITY_API_KEY", "Stability AI"),
+            ("POLLINATIONS_API_KEY", "Pollinations THỬ NGHIỆM (sk_ Quest-only, giới hạn budget)"),
         )
         for index, (key, label) in enumerate(names):
             self._label(card, label, 12, bold=True).pack(
@@ -455,7 +456,7 @@ class StudioPages:
         check_row.pack(fill="x", padx=20, pady=(0, 9))
         ctk.CTkOptionMenu(
             check_row, values=["openai", "gemini", "replicate", "cloudflare",
-                               "huggingface", "stability", "fal"],
+                               "huggingface", "stability", "fal", "pollinations"],
             variable=self.api_discovery_vendor, width=165, fg_color=CARD_ALT,
             text_color=WHITE,
         ).pack(side="left", padx=(0, 9))
@@ -468,6 +469,35 @@ class StudioPages:
             11, fg=WARNING, wraplength=690, justify="left",
         )
         self.model_scan_status.pack(anchor="w", padx=20, pady=(2, 17))
+        radar = self._card(page)
+        radar.pack(fill="x", padx=8, pady=(0, 14))
+        self._label(
+            radar, "FREE API RADAR · THỬ TRƯỚC KHI MUA", 15,
+            bold=True,
+        ).pack(anchor="w", padx=20, pady=(16, 7))
+        self._label(
+            radar,
+            "Cloudflare Free: 10.000 Neurons/ngày theo chính sách hiện hành. "
+            "Pollinations: danh mục đọc miễn phí, nhưng tạo ảnh có thể trừ "
+            "Quest Pollen; KHÔNG phải API miễn phí vô hạn. "
+            "Tự cập nhật mặc định TẮT; chỉ tải metadata sau khi bật, không gửi key và không tạo ảnh.",
+            11, fg=MUTED, wraplength=720,
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+        ctk.CTkCheckBox(
+            radar, text="Tùy chọn: tự tải catalog khi mở Cài đặt (mặc định TẮT)",
+            variable=self.free_catalog_autoupdate, fg_color=ACCENT,
+            text_color=WHITE,
+        ).pack(anchor="w", padx=20, pady=(0, 9))
+        self._button(
+            radar, "Làm mới catalog ngay (không cần key)",
+            self.refresh_free_api_radar, width=270,
+        ).pack(anchor="w", padx=20, pady=(0, 10))
+        self.free_radar_status = self._label(
+            radar, "Chưa tải danh mục. Chỉ hiển thị model đủ metadata, "
+                   "không tự kích hoạt model mới.", 11, fg=WARNING,
+            wraplength=720, justify="left",
+        )
+        self.free_radar_status.pack(anchor="w", padx=20, pady=(0, 17))
         limits = self._card(page)
         limits.pack(fill="x", padx=8, pady=(0, 14))
         self._label(limits, "GIỚI HẠN API VÀ KHO KHÓA WINDOWS", 14, bold=True).pack(
