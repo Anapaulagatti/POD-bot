@@ -103,3 +103,60 @@ def gemini_seo(
         return normalize_metadata(data["title"], data["description"], data["tags"])
     except (KeyError, IndexError, ValueError, TypeError) as exc:
         raise RuntimeError("Gemini returned invalid SEO metadata.") from exc
+
+
+def gemini_refine_prompt(prompt: str, api_key: str, *, model: str) -> str:
+    """Explicit, potentially billable text-only prompt rewrite. No retries or images."""
+    if not api_key.strip():
+        raise ValueError("GEMINI_API_KEY is required for Gemini prompt editing.")
+    if not re.fullmatch(r"gemini-[a-zA-Z0-9._-]{3,100}", model):
+        raise ValueError("Invalid Gemini text model ID.")
+    if not 8 <= len(prompt.strip()) <= 3500:
+        raise ValueError("Prompt must be between 8 and 3500 characters.")
+    instructions = (
+        "Rewrite this original print-on-demand design prompt as concise English "
+        "instructions suitable for a text-to-image model. Preserve subject, "
+        "original words, style, exact colors, requested background and layout. "
+        "Do not add trademarks, brand names, characters, extra text, shadows, "
+        "fake checkerboard transparency or gradients. Prioritize crisp print "
+        "silhouettes. Return one revised prompt only, under 1200 characters. "
+        "Do not generate an image. Source:\n" + prompt.strip()
+    )
+    request = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        data=json.dumps({
+            "contents": [{"parts": [{"text": instructions}]}],
+            "generationConfig": {"maxOutputTokens": 550},
+        }).encode("utf-8"),
+        method="POST",
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+    )
+    # A project can be in the paid tier even for a model with a Free Tier listing.
+    reserve_paid_request("gemini")
+    try:
+        with open_authenticated(request, timeout=90) as response:
+            result = read_limited_json(response)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 403:
+            raise RuntimeError(
+                "Gemini HTTP 403: key/project may be restricted or Free Tier "
+                "unavailable. Check AI Studio project status; listing is not access."
+            ) from None
+        if exc.code == 429:
+            raise RuntimeError(
+                "Gemini HTTP 429: request or daily quota exhausted. "
+                "Check AI Studio Rate Limits. No automatic retry."
+            ) from None
+        raise RuntimeError(
+            f"Gemini prompt request HTTP {exc.code}. Check model and project."
+        ) from None
+    try:
+        parts = result["candidates"][0]["content"]["parts"]
+        revised = "\n".join(
+            part["text"] for part in parts if isinstance(part.get("text"), str)
+        ).strip()
+    except (ValueError, TypeError, KeyError, IndexError) as exc:
+        raise RuntimeError("Gemini returned no usable text prompt.") from exc
+    if not 8 <= len(revised) <= 1600:
+        raise RuntimeError("Gemini text prompt is empty or too long; not applied.")
+    return revised
